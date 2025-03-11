@@ -76,12 +76,16 @@ export function SidebarLayout({ children, sidebar }: SidebarLayoutProps) {
           <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center lg:hidden">
               <i className="ri-building-4-line text-2xl text-primary mr-2"></i>
-              <h1 className="font-bold text-primary-600">ĐẠI HỌC XYZ</h1>
+              <h1 className="font-bold text-primary-600">ĐẠI HỌC NỒN</h1>
             </div>
 
             <div className="ml-auto flex items-center space-x-4">
               <div className="relative">
-                <Button variant="ghost" size="icon" className="text-gray-500 hover:text-gray-700">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-gray-500 hover:text-gray-700"
+                >
                   <Bell className="h-5 w-5" />
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs">
                     3
@@ -93,8 +97,13 @@ export function SidebarLayout({ children, sidebar }: SidebarLayoutProps) {
                 <DropdownMenuTrigger asChild>
                   <div className="flex items-center cursor-pointer">
                     <Avatar className="w-8 h-8 mr-2">
-                      <AvatarImage src={user?.avatar || ""} alt={user?.fullName || ""} />
-                      <AvatarFallback>{user?.fullName ? getInitials(user.fullName) : "UN"}</AvatarFallback>
+                      <AvatarImage
+                        src={user?.avatar || ""}
+                        alt={user?.fullName || ""}
+                      />
+                      <AvatarFallback>
+                        {user?.fullName ? getInitials(user.fullName) : "UN"}
+                      </AvatarFallback>
                     </Avatar>
                     <div className="hidden md:block text-sm">
                       <p className="font-medium">{user?.fullName}</p>
@@ -108,7 +117,10 @@ export function SidebarLayout({ children, sidebar }: SidebarLayoutProps) {
                   <DropdownMenuItem>Thông tin cá nhân</DropdownMenuItem>
                   <DropdownMenuItem>Cài đặt</DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="text-red-500">
+                  <DropdownMenuItem
+                    onClick={handleLogout}
+                    className="text-red-500"
+                  >
                     <LogOut className="mr-2 h-4 w-4" />
                     Đăng xuất
                   </DropdownMenuItem>
