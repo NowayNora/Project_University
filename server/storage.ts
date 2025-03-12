@@ -1,10 +1,11 @@
-// server/storage.ts
 import { db } from "./db";
 import * as schema from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import {
+  TaiKhoan,
+  InsertTaiKhoan,
   SinhVien,
   InsertSinhVien,
   GiangVien,
@@ -30,62 +31,46 @@ import {
 const MemoryStore = createMemoryStore(session);
 
 export interface IStorage {
-  // Sinh viên (Student) related operations
-  getSinhVien(MSSV: string): Promise<SinhVien | undefined>;
+  getUser(id: number): Promise<TaiKhoan | undefined>;
+  getUserByUsername(username: string): Promise<TaiKhoan | undefined>;
+  createUser(user: InsertTaiKhoan): Promise<TaiKhoan>;
+  getSinhVienByUserId(userId: number): Promise<SinhVien | undefined>;
+  getGiangVienByUserId(userId: number): Promise<GiangVien | undefined>;
+  getSinhVien(maSv: string): Promise<SinhVien | undefined>;
   createSinhVien(sinhvien: InsertSinhVien): Promise<SinhVien>;
-
-  // Giảng viên (Faculty) related operations
-  getGiangVien(MaGV: string): Promise<GiangVien | undefined>;
+  getGiangVien(maGv: string): Promise<GiangVien | undefined>;
   createGiangVien(giangvien: InsertGiangVien): Promise<GiangVien>;
-
-  // Môn học (Course) related operations
-  getMonHoc(MaMonHoc: string): Promise<MonHoc | undefined>;
+  getMonHoc(maMon: string): Promise<MonHoc | undefined>;
   getAllMonHoc(): Promise<MonHoc[]>;
   createMonHoc(monhoc: InsertMonHoc): Promise<MonHoc>;
-
-  // Lớp (Class) related operations
-  getLop(MaLop: string): Promise<Lop | undefined>;
+  getLop(maLop: string): Promise<Lop | undefined>;
   createLop(lop: InsertLop): Promise<Lop>;
-
-  // Đăng ký học phần (Enrollment) related operations
   getDangKyHocPhan(id: number): Promise<DangKyHocPhan | undefined>;
-  getDangKyHocPhanBySinhVien(MSSV: string): Promise<DangKyHocPhan[]>;
+  getDangKyHocPhanBySinhVien(maSv: string): Promise<DangKyHocPhan[]>;
   createDangKyHocPhan(dangky: InsertDangKyHocPhan): Promise<DangKyHocPhan>;
-
-  // Lịch học (Schedule) related operations
   getLichHoc(id: number): Promise<LichHoc | undefined>;
-  getLichHocBySinhVien(MSSV: string): Promise<LichHoc[]>;
+  getLichHocBySinhVien(maSv: string): Promise<LichHoc[]>;
   createLichHoc(lichhoc: InsertLichHoc): Promise<LichHoc>;
-
-  // Thanh toán học phí (Tuition Fee) related operations
   getThanhToanHocPhi(id: number): Promise<ThanhToanHocPhi | undefined>;
-  getThanhToanHocPhiBySinhVien(MSSV: string): Promise<ThanhToanHocPhi[]>;
+  getThanhToanHocPhiBySinhVien(maSv: string): Promise<ThanhToanHocPhi[]>;
   createThanhToanHocPhi(
     thanhToan: InsertThanhToanHocPhi
   ): Promise<ThanhToanHocPhi>;
-
-  // Nghiên cứu khoa học (Research Project) related operations
   getNghienCuuKhoaHoc(id: number): Promise<NghienCuuKhoaHoc | undefined>;
   getAllNghienCuuKhoaHoc(): Promise<NghienCuuKhoaHoc[]>;
   createNghienCuuKhoaHoc(
     project: InsertNghienCuuKhoaHoc
   ): Promise<NghienCuuKhoaHoc>;
-
-  // Thành viên nghiên cứu (Research Member) related operations
   getThanhVienNghienCuu(id: number): Promise<ThanhVienNghienCuu | undefined>;
   getThanhVienNghienCuuByNghienCuu(
-    MaNghienCuu: number
+    maNghienCuu: number
   ): Promise<ThanhVienNghienCuu[]>;
   createThanhVienNghienCuu(
     member: InsertThanhVienNghienCuu
   ): Promise<ThanhVienNghienCuu>;
-
-  // Thông báo (Announcement) related operations
   getThongBao(id: number): Promise<ThongBao | undefined>;
   getAllThongBao(): Promise<ThongBao[]>;
   createThongBao(thongbao: InsertThongBao): Promise<ThongBao>;
-
-  // Session store
   sessionStore: session.SessionStore;
 }
 
@@ -93,53 +78,102 @@ export class MySQLStorage implements IStorage {
   sessionStore: session.SessionStore;
 
   constructor() {
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000, // 24 hours
-    });
+    this.sessionStore = new MemoryStore({ checkPeriod: 86400000 });
   }
 
-  // Sinh viên methods
-  async getSinhVien(MSSV: string): Promise<SinhVien | undefined> {
+  async getUser(id: number): Promise<TaiKhoan | undefined> {
+    const result = await db
+      .select()
+      .from(schema.taikhoan)
+      .where(eq(schema.taikhoan.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getUserByUsername(username: string): Promise<TaiKhoan | undefined> {
+    const result = await db
+      .select()
+      .from(schema.taikhoan)
+      .where(eq(schema.taikhoan.tenDangNhap, username))
+      .limit(1);
+    return result[0];
+  }
+
+  async createUser(user: InsertTaiKhoan): Promise<TaiKhoan> {
+    const [insertResult] = await db.insert(schema.taikhoan).values(user);
+    const result = await db
+      .select()
+      .from(schema.taikhoan)
+      .where(eq(schema.taikhoan.id, insertResult.insertId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getSinhVienByUserId(userId: number): Promise<SinhVien | undefined> {
+    const user = await this.getUser(userId);
+    if (!user?.sinhVienId) return undefined;
     const result = await db
       .select()
       .from(schema.sinhvien)
-      .where(eq(schema.sinhvien.MSSV, MSSV))
+      .where(eq(schema.sinhvien.id, user.sinhVienId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getGiangVienByUserId(userId: number): Promise<GiangVien | undefined> {
+    const user = await this.getUser(userId);
+    if (!user?.giangVienId) return undefined;
+    const result = await db
+      .select()
+      .from(schema.giangvien)
+      .where(eq(schema.giangvien.id, user.giangVienId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getSinhVien(maSv: string): Promise<SinhVien | undefined> {
+    const result = await db
+      .select()
+      .from(schema.sinhvien)
+      .where(eq(schema.sinhvien.maSv, maSv))
       .limit(1);
     return result[0];
   }
 
   async createSinhVien(sinhvien: InsertSinhVien): Promise<SinhVien> {
+    const [insertResult] = await db.insert(schema.sinhvien).values(sinhvien);
     const result = await db
-      .insert(schema.sinhvien)
-      .values(sinhvien)
-      .returning();
+      .select()
+      .from(schema.sinhvien)
+      .where(eq(schema.sinhvien.id, insertResult.insertId))
+      .limit(1);
     return result[0];
   }
 
-  // Giảng viên methods
-  async getGiangVien(MaGV: string): Promise<GiangVien | undefined> {
+  async getGiangVien(maGv: string): Promise<GiangVien | undefined> {
     const result = await db
       .select()
       .from(schema.giangvien)
-      .where(eq(schema.giangvien.MaGV, MaGV))
+      .where(eq(schema.giangvien.maGv, maGv))
       .limit(1);
     return result[0];
   }
 
   async createGiangVien(giangvien: InsertGiangVien): Promise<GiangVien> {
+    const [insertResult] = await db.insert(schema.giangvien).values(giangvien);
     const result = await db
-      .insert(schema.giangvien)
-      .values(giangvien)
-      .returning();
+      .select()
+      .from(schema.giangvien)
+      .where(eq(schema.giangvien.id, insertResult.insertId))
+      .limit(1);
     return result[0];
   }
 
-  // Môn học methods
-  async getMonHoc(MaMonHoc: string): Promise<MonHoc | undefined> {
+  async getMonHoc(id: number): Promise<MonHoc | undefined> {
     const result = await db
       .select()
       .from(schema.monhoc)
-      .where(eq(schema.monhoc.MaMonHoc, MaMonHoc))
+      .where(eq(schema.monhoc.id, id))
       .limit(1);
     return result[0];
   }
@@ -149,107 +183,135 @@ export class MySQLStorage implements IStorage {
   }
 
   async createMonHoc(monhoc: InsertMonHoc): Promise<MonHoc> {
-    const result = await db.insert(schema.monhoc).values(monhoc).returning();
+    const [insertResult] = await db.insert(schema.monhoc).values(monhoc);
+    const result = await db
+      .select()
+      .from(schema.monhoc)
+      .where(eq(schema.monhoc.id, insertResult.insertId))
+      .limit(1);
     return result[0];
   }
 
-  // Lớp methods
-  async getLop(MaLop: string): Promise<Lop | undefined> {
+  async getLop(maLop: string): Promise<Lop | undefined> {
     const result = await db
       .select()
       .from(schema.lop)
-      .where(eq(schema.lop.MaLop, MaLop))
+      .where(eq(schema.lop.maLop, maLop))
       .limit(1);
     return result[0];
   }
 
   async createLop(lop: InsertLop): Promise<Lop> {
-    const result = await db.insert(schema.lop).values(lop).returning();
-    return result[0];
-  }
-
-  // Đăng ký học phần methods
-  async getDangKyHocPhan(id: number): Promise<DangKyHocPhan | undefined> {
+    const [insertResult] = await db.insert(schema.lop).values(lop);
     const result = await db
       .select()
-      .from(schema.dangkyhocphan)
-      .where(eq(schema.dangkyhocphan.ID, id))
+      .from(schema.lop)
+      .where(eq(schema.lop.id, insertResult.insertId))
       .limit(1);
     return result[0];
   }
 
-  async getDangKyHocPhanBySinhVien(MSSV: string): Promise<DangKyHocPhan[]> {
+  async getDangKyHocPhan(id: number): Promise<DangKyHocPhan | undefined> {
+    const result = await db
+      .select()
+      .from(schema.dangkyhocphan)
+      .where(eq(schema.dangkyhocphan.id, id))
+      .limit(1);
+    return result[0];
+  }
+
+  async getDangKyHocPhanBySinhVien(maSv: string): Promise<DangKyHocPhan[]> {
+    const sinhVien = await this.getSinhVien(maSv);
+    if (!sinhVien) return [];
     return await db
       .select()
       .from(schema.dangkyhocphan)
-      .where(eq(schema.dangkyhocphan.MSSV, MSSV));
+      .where(eq(schema.dangkyhocphan.sinhVienId, sinhVien.id));
   }
 
   async createDangKyHocPhan(
     dangky: InsertDangKyHocPhan
   ): Promise<DangKyHocPhan> {
+    const [insertResult] = await db.insert(schema.dangkyhocphan).values(dangky);
     const result = await db
-      .insert(schema.dangkyhocphan)
-      .values(dangky)
-      .returning();
+      .select()
+      .from(schema.dangkyhocphan)
+      .where(eq(schema.dangkyhocphan.id, insertResult.insertId))
+      .limit(1);
     return result[0];
   }
 
-  // Lịch học methods
   async getLichHoc(id: number): Promise<LichHoc | undefined> {
     const result = await db
       .select()
       .from(schema.lichhoc)
-      .where(eq(schema.lichhoc.ID, id))
+      .where(eq(schema.lichhoc.id, id))
       .limit(1);
     return result[0];
   }
 
-  async getLichHocBySinhVien(MSSV: string): Promise<LichHoc[]> {
+  async getLichHocBySinhVien(maSv: string): Promise<LichHoc[]> {
+    const sinhVien = await this.getSinhVien(maSv);
+    if (!sinhVien) return [];
+    const dangKy = await this.getDangKyHocPhanBySinhVien(maSv);
+    const monHocIds = dangKy.map((dk) => dk.monHocId);
     return await db
       .select()
       .from(schema.lichhoc)
-      .where(eq(schema.lichhoc.MSSV, MSSV));
+      .where(
+        monHocIds.length
+          ? eq(schema.lichhoc.monHocId, monHocIds[0])
+          : eq(schema.lichhoc.id, -1)
+      );
   }
 
   async createLichHoc(lichhoc: InsertLichHoc): Promise<LichHoc> {
-    const result = await db.insert(schema.lichhoc).values(lichhoc).returning();
+    const [insertResult] = await db.insert(schema.lichhoc).values(lichhoc);
+    const result = await db
+      .select()
+      .from(schema.lichhoc)
+      .where(eq(schema.lichhoc.id, insertResult.insertId))
+      .limit(1);
     return result[0];
   }
 
-  // Thanh toán học phí methods
   async getThanhToanHocPhi(id: number): Promise<ThanhToanHocPhi | undefined> {
     const result = await db
       .select()
       .from(schema.thanhtoanhocphi)
-      .where(eq(schema.thanhtoanhocphi.ID, id))
+      .where(eq(schema.thanhtoanhocphi.id, id))
       .limit(1);
     return result[0];
   }
 
-  async getThanhToanHocPhiBySinhVien(MSSV: string): Promise<ThanhToanHocPhi[]> {
+  async getThanhToanHocPhiBySinhVien(maSv: string): Promise<ThanhToanHocPhi[]> {
+    const sinhVien = await this.getSinhVien(maSv);
+    if (!sinhVien) return [];
     return await db
       .select()
       .from(schema.thanhtoanhocphi)
-      .where(eq(schema.thanhtoanhocphi.MSSV, MSSV));
+      .where(eq(schema.thanhtoanhocphi.sinhVienId, sinhVien.id));
   }
 
   async createThanhToanHocPhi(
     thanhToan: InsertThanhToanHocPhi
   ): Promise<ThanhToanHocPhi> {
-    const result = await db
+    const [insertResult] = await db
       .insert(schema.thanhtoanhocphi)
-      .values(thanhToan)
-      .returning();
+      .values(thanhToan);
+    const result = await db
+      .select()
+      .from(schema.thanhtoanhocphi)
+      .where(eq(schema.thanhtoanhocphi.id, insertResult.insertId))
+      .limit(1);
     return result[0];
   }
 
-  // Nghiên cứu khoa học methods
   async getNghienCuuKhoaHoc(id: number): Promise<NghienCuuKhoaHoc | undefined> {
     const result = await db
       .select()
       .from(schema.nghiencuukhoahoc)
-      .where(eq(schema.nghiencuukhoahoc.ID, id))
+      .where(eq(schema.nghiencuukhoahoc.id, id))
       .limit(1);
     return result[0];
   }
@@ -261,50 +323,56 @@ export class MySQLStorage implements IStorage {
   async createNghienCuuKhoaHoc(
     project: InsertNghienCuuKhoaHoc
   ): Promise<NghienCuuKhoaHoc> {
-    const result = await db
+    const [insertResult] = await db
       .insert(schema.nghiencuukhoahoc)
-      .values(project)
-      .returning();
+      .values(project);
+    const result = await db
+      .select()
+      .from(schema.nghiencuukhoahoc)
+      .where(eq(schema.nghiencuukhoahoc.id, insertResult.insertId))
+      .limit(1);
     return result[0];
   }
 
-  // Thành viên nghiên cứu methods
   async getThanhVienNghienCuu(
     id: number
   ): Promise<ThanhVienNghienCuu | undefined> {
     const result = await db
       .select()
       .from(schema.thanhviennghiencuu)
-      .where(eq(schema.thanhviennghiencuu.ID, id))
+      .where(eq(schema.thanhviennghiencuu.id, id))
       .limit(1);
     return result[0];
   }
 
   async getThanhVienNghienCuuByNghienCuu(
-    MaNghienCuu: number
+    maNghienCuu: number
   ): Promise<ThanhVienNghienCuu[]> {
     return await db
       .select()
       .from(schema.thanhviennghiencuu)
-      .where(eq(schema.thanhviennghiencuu.MaNghienCuu, MaNghienCuu));
+      .where(eq(schema.thanhviennghiencuu.nghienCuuId, maNghienCuu));
   }
 
   async createThanhVienNghienCuu(
     member: InsertThanhVienNghienCuu
   ): Promise<ThanhVienNghienCuu> {
-    const result = await db
+    const [insertResult] = await db
       .insert(schema.thanhviennghiencuu)
-      .values(member)
-      .returning();
+      .values(member);
+    const result = await db
+      .select()
+      .from(schema.thanhviennghiencuu)
+      .where(eq(schema.thanhviennghiencuu.id, insertResult.insertId))
+      .limit(1);
     return result[0];
   }
 
-  // Thông báo methods
   async getThongBao(id: number): Promise<ThongBao | undefined> {
     const result = await db
       .select()
       .from(schema.thongbao)
-      .where(eq(schema.thongbao.ID, id))
+      .where(eq(schema.thongbao.id, id))
       .limit(1);
     return result[0];
   }
@@ -314,10 +382,12 @@ export class MySQLStorage implements IStorage {
   }
 
   async createThongBao(thongbao: InsertThongBao): Promise<ThongBao> {
+    const [insertResult] = await db.insert(schema.thongbao).values(thongbao);
     const result = await db
-      .insert(schema.thongbao)
-      .values(thongbao)
-      .returning();
+      .select()
+      .from(schema.thongbao)
+      .where(eq(schema.thongbao.id, insertResult.insertId))
+      .limit(1);
     return result[0];
   }
 }
