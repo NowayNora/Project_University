@@ -1,0 +1,9 @@
+{
+  "tenDangNhap": "sv003",
+  "password": "123",
+  "role": "student",
+  "email": "sv003@example.com",
+  "maSv": "SV003",
+  "fullName": "Trần Văn C",
+  "lopId": 1
+}

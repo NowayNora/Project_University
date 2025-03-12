@@ -14,23 +14,18 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2 } from "lucide-react";
 
 // Login schema
 const loginSchema = z.object({
-  username: z.string().min(1, "Tên đăng nhập không được để trống"),
-  password: z.string().min(1, "Mật khẩu không được để trống"),
+  tenDangNhap: z.string().min(1, "Tên đăng nhập không được để trống"),
+  matKhau: z.string().min(1, "Mật khẩu không được để trống"),
 });
 
 // Registration schema
 const registerSchema = z.object({
-  username: z.string().min(3, "Tên đăng nhập phải có ít nhất 3 ký tự"),
+  tenDangNhap: z.string().min(3, "Tên đăng nhập phải có ít nhất 3 ký tự"),
   password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
   fullName: z.string().min(1, "Họ tên không được để trống"),
   email: z.string().email("Email không hợp lệ"),
@@ -63,12 +58,13 @@ export default function AuthPage() {
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: "",
-      password: "",
+      tenDangNhap: "",
+      matKhau: "",
     },
   });
 
   const handleLoginSubmit = (values: z.infer<typeof loginSchema>) => {
+    console.log("Login data:", values);
     loginMutation.mutate(values);
   };
 
@@ -76,7 +72,7 @@ export default function AuthPage() {
   const registerForm = useForm<z.infer<typeof registerSchema>>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
-      username: "",
+      tenDangNhap: "",
       password: "",
       fullName: "",
       email: "",
@@ -102,9 +98,13 @@ export default function AuthPage() {
   return (
     <div className="min-h-screen grid md:grid-cols-2">
       {/* Left side: University background image */}
-      <div className="login-bg hidden md:block bg-cover bg-center" 
-        style={{ backgroundImage: "url('https://images.unsplash.com/photo-1523050854058-8df90110c9f1?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80')" }}>
-      </div>
+      <div
+        className="login-bg hidden md:block bg-cover bg-center"
+        style={{
+          backgroundImage:
+            "url('https://images.unsplash.com/photo-1523050854058-8df90110c9f1?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1470&q=80')",
+        }}
+      ></div>
 
       {/* Right side: Login form */}
       <div className="flex items-center justify-center p-8">
@@ -120,16 +120,22 @@ export default function AuthPage() {
 
           {/* Login/Register tabs & forms */}
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <Tabs defaultValue="student" value={activeTab} onValueChange={handleRoleChange}>
+            <Tabs
+              defaultValue="student"
+              value={activeTab}
+              onValueChange={handleRoleChange}
+            >
               <TabsList className="grid w-full grid-cols-2 rounded-none">
-                <TabsTrigger 
-                  value="student" 
-                  className="py-3 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <TabsTrigger
+                  value="student"
+                  className="py-3 data-[state=active]:bg-primary data-[state=active]:text-white"
+                >
                   Sinh viên
                 </TabsTrigger>
-                <TabsTrigger 
-                  value="faculty" 
-                  className="py-3 data-[state=active]:bg-primary data-[state=active]:text-white">
+                <TabsTrigger
+                  value="faculty"
+                  className="py-3 data-[state=active]:bg-primary data-[state=active]:text-white"
+                >
                   Giảng viên
                 </TabsTrigger>
               </TabsList>
@@ -138,15 +144,21 @@ export default function AuthPage() {
                 {formMode === "login" ? (
                   <>
                     <Form {...loginForm}>
-                      <form onSubmit={loginForm.handleSubmit(handleLoginSubmit)} className="space-y-4">
+                      <form
+                        onSubmit={loginForm.handleSubmit(handleLoginSubmit)}
+                        className="space-y-4"
+                      >
                         <FormField
                           control={loginForm.control}
-                          name="username"
+                          name="tenDangNhap"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Tên đăng nhập</FormLabel>
                               <FormControl>
-                                <Input placeholder="Nhập tên đăng nhập" {...field} />
+                                <Input
+                                  placeholder="Nhập tên đăng nhập"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -154,25 +166,24 @@ export default function AuthPage() {
                         />
                         <FormField
                           control={loginForm.control}
-                          name="password"
+                          name="matKhau"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Mật khẩu</FormLabel>
                               <FormControl>
-                                <Input type="password" placeholder="Nhập mật khẩu" {...field} />
+                                <Input
+                                  type="password"
+                                  placeholder="Nhập mật khẩu"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
-                              <div className="flex justify-end mt-1">
-                                <a href="#" className="text-sm text-primary hover:underline">
-                                  Quên mật khẩu?
-                                </a>
-                              </div>
                             </FormItem>
                           )}
                         />
-                        <Button 
-                          type="submit" 
-                          className="w-full" 
+                        <Button
+                          type="submit"
+                          className="w-full"
                           disabled={loginMutation.isPending}
                         >
                           {loginMutation.isPending ? (
@@ -195,15 +206,23 @@ export default function AuthPage() {
                 ) : (
                   <>
                     <Form {...registerForm}>
-                      <form onSubmit={registerForm.handleSubmit(handleRegisterSubmit)} className="space-y-4">
+                      <form
+                        onSubmit={registerForm.handleSubmit(
+                          handleRegisterSubmit
+                        )}
+                        className="space-y-4"
+                      >
                         <FormField
                           control={registerForm.control}
-                          name="username"
+                          name="tenDangNhap"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Tên đăng nhập</FormLabel>
                               <FormControl>
-                                <Input placeholder="Nhập tên đăng nhập" {...field} />
+                                <Input
+                                  placeholder="Nhập tên đăng nhập"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -216,7 +235,11 @@ export default function AuthPage() {
                             <FormItem>
                               <FormLabel>Mật khẩu</FormLabel>
                               <FormControl>
-                                <Input type="password" placeholder="Nhập mật khẩu" {...field} />
+                                <Input
+                                  type="password"
+                                  placeholder="Nhập mật khẩu"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -229,7 +252,10 @@ export default function AuthPage() {
                             <FormItem>
                               <FormLabel>Họ và tên</FormLabel>
                               <FormControl>
-                                <Input placeholder="Nhập họ và tên" {...field} />
+                                <Input
+                                  placeholder="Nhập họ và tên"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -275,15 +301,19 @@ export default function AuthPage() {
                             <FormItem>
                               <FormLabel>Email</FormLabel>
                               <FormControl>
-                                <Input type="email" placeholder="Nhập địa chỉ email" {...field} />
+                                <Input
+                                  type="email"
+                                  placeholder="Nhập địa chỉ email"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                        <Button 
-                          type="submit" 
-                          className="w-full" 
+                        <Button
+                          type="submit"
+                          className="w-full"
                           disabled={registerMutation.isPending}
                         >
                           {registerMutation.isPending ? (
@@ -310,15 +340,21 @@ export default function AuthPage() {
                 {formMode === "login" ? (
                   <>
                     <Form {...loginForm}>
-                      <form onSubmit={loginForm.handleSubmit(handleLoginSubmit)} className="space-y-4">
+                      <form
+                        onSubmit={loginForm.handleSubmit(handleLoginSubmit)}
+                        className="space-y-4"
+                      >
                         <FormField
                           control={loginForm.control}
-                          name="username"
+                          name="tenDangNhap"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Tên đăng nhập</FormLabel>
                               <FormControl>
-                                <Input placeholder="Nhập tên đăng nhập" {...field} />
+                                <Input
+                                  placeholder="Nhập tên đăng nhập"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -326,25 +362,32 @@ export default function AuthPage() {
                         />
                         <FormField
                           control={loginForm.control}
-                          name="password"
+                          name="matKhau"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Mật khẩu</FormLabel>
                               <FormControl>
-                                <Input type="password" placeholder="Nhập mật khẩu" {...field} />
+                                <Input
+                                  type="password"
+                                  placeholder="Nhập mật khẩu"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                               <div className="flex justify-end mt-1">
-                                <a href="#" className="text-sm text-primary hover:underline">
+                                <a
+                                  href="#"
+                                  className="text-sm text-primary hover:underline"
+                                >
                                   Quên mật khẩu?
                                 </a>
                               </div>
                             </FormItem>
                           )}
                         />
-                        <Button 
-                          type="submit" 
-                          className="w-full" 
+                        <Button
+                          type="submit"
+                          className="w-full"
                           disabled={loginMutation.isPending}
                         >
                           {loginMutation.isPending ? (
@@ -367,15 +410,23 @@ export default function AuthPage() {
                 ) : (
                   <>
                     <Form {...registerForm}>
-                      <form onSubmit={registerForm.handleSubmit(handleRegisterSubmit)} className="space-y-4">
+                      <form
+                        onSubmit={registerForm.handleSubmit(
+                          handleRegisterSubmit
+                        )}
+                        className="space-y-4"
+                      >
                         <FormField
                           control={registerForm.control}
-                          name="username"
+                          name="tenDangNhap"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Tên đăng nhập</FormLabel>
                               <FormControl>
-                                <Input placeholder="Nhập tên đăng nhập" {...field} />
+                                <Input
+                                  placeholder="Nhập tên đăng nhập"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -388,7 +439,11 @@ export default function AuthPage() {
                             <FormItem>
                               <FormLabel>Mật khẩu</FormLabel>
                               <FormControl>
-                                <Input type="password" placeholder="Nhập mật khẩu" {...field} />
+                                <Input
+                                  type="password"
+                                  placeholder="Nhập mật khẩu"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -401,7 +456,10 @@ export default function AuthPage() {
                             <FormItem>
                               <FormLabel>Họ và tên</FormLabel>
                               <FormControl>
-                                <Input placeholder="Nhập họ và tên" {...field} />
+                                <Input
+                                  placeholder="Nhập họ và tên"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
@@ -447,15 +505,19 @@ export default function AuthPage() {
                             <FormItem>
                               <FormLabel>Email</FormLabel>
                               <FormControl>
-                                <Input type="email" placeholder="Nhập địa chỉ email" {...field} />
+                                <Input
+                                  type="email"
+                                  placeholder="Nhập địa chỉ email"
+                                  {...field}
+                                />
                               </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                        <Button 
-                          type="submit" 
-                          className="w-full" 
+                        <Button
+                          type="submit"
+                          className="w-full"
                           disabled={registerMutation.isPending}
                         >
                           {registerMutation.isPending ? (
