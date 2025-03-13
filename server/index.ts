@@ -9,6 +9,8 @@ import fs from "fs";
 import http from "http";
 import https from "https";
 import path from "path";
+import dotenv from "dotenv";
+dotenv.config();
 
 // Cấu hình SSL
 const sslPath = "D:\\Every\\ssl";

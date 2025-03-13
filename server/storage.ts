@@ -71,11 +71,11 @@ export interface IStorage {
   getThongBao(id: number): Promise<ThongBao | undefined>;
   getAllThongBao(): Promise<ThongBao[]>;
   createThongBao(thongbao: InsertThongBao): Promise<ThongBao>;
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
 }
 
 export class MySQLStorage implements IStorage {
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
 
   constructor() {
     this.sessionStore = new MemoryStore({ checkPeriod: 86400000 });
@@ -169,11 +169,11 @@ export class MySQLStorage implements IStorage {
     return result[0];
   }
 
-  async getMonHoc(id: number): Promise<MonHoc | undefined> {
+  async getMonHoc(maMon: string): Promise<MonHoc | undefined> {
     const result = await db
       .select()
       .from(schema.monhoc)
-      .where(eq(schema.monhoc.id, id))
+      .where(eq(schema.monhoc.id, maMon))
       .limit(1);
     return result[0];
   }

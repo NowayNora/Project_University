@@ -20,7 +20,7 @@ import { Loader2 } from "lucide-react";
 // Login schema
 const loginSchema = z.object({
   tenDangNhap: z.string().min(1, "Tên đăng nhập không được để trống"),
-  matKhau: z.string().min(1, "Mật khẩu không được để trống"),
+  password: z.string().min(1, "Mật khẩu không được để trống"),
 });
 
 // Registration schema
@@ -59,7 +59,7 @@ export default function AuthPage() {
     resolver: zodResolver(loginSchema),
     defaultValues: {
       tenDangNhap: "",
-      matKhau: "",
+      password: "",
     },
   });
 
@@ -166,7 +166,7 @@ export default function AuthPage() {
                         />
                         <FormField
                           control={loginForm.control}
-                          name="matKhau"
+                          name="password"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Mật khẩu</FormLabel>
@@ -362,7 +362,7 @@ export default function AuthPage() {
                         />
                         <FormField
                           control={loginForm.control}
-                          name="matKhau"
+                          name="password"
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Mật khẩu</FormLabel>

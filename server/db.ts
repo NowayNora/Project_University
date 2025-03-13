@@ -3,10 +3,10 @@ import { createPool } from "mysql2/promise";
 import * as schema from "@shared/schema";
 
 const pool = createPool({
-  host: "127.0.0.1",
-  user: "root",
-  password: "", // Đảm bảo thêm mật khẩu nếu cần
-  database: "db_sinhvien",
+  host: process.env.DB_HOST || "127.0.0.1",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_NAME || "db_sinhvien",
 });
 
 export const db = drizzle(pool, { schema, mode: "default" });

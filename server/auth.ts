@@ -53,9 +53,9 @@ export function setupAuth(app: Express) {
     secret: process.env.SESSION_SECRET || "university-management-system-secret",
     resave: false,
     saveUninitialized: false,
-    store: storage.sessionStore,
+    store: storage.sessionStore, // MemoryStore
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === "production" ? true : false,
       maxAge: 1000 * 60 * 60 * 24, // 1 day
     },
   };
@@ -244,7 +244,8 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    console.log("Request body:", req.body); // Log để kiểm tra body
+    console.log("Request body:", JSON.stringify(req.body)); // In chi tiết body
+    console.log("Headers:", req.headers); // In headers để kiểm tra Content-Type
     passport.authenticate("local", (err, user, info) => {
       if (err) return next(err);
       if (!user)
