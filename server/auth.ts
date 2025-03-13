@@ -244,24 +244,27 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    console.log("Request body:", JSON.stringify(req.body)); // In chi tiết body
-    console.log("Headers:", req.headers); // In headers để kiểm tra Content-Type
-    passport.authenticate("local", (err, user, info) => {
-      if (err) return next(err);
-      if (!user)
-        return res
-          .status(401)
-          .json({ message: info?.message || "Invalid credentials" });
-      req.login(user, (err) => {
+    // console.log("Request body:", JSON.stringify(req.body)); // In chi tiết body
+    // console.log("Headers:", req.headers); // In headers để kiểm tra Content-Type
+    passport.authenticate(
+      "local",
+      (err: Error | null, user: any, info: any) => {
         if (err) return next(err);
-        return res.status(200).json({
-          id: user.id,
-          role: user.role,
-          fullName: user.fullName,
-          email: user.email,
+        if (!user)
+          return res
+            .status(401)
+            .json({ message: info?.message || "Invalid credentials" });
+        req.login(user, (err) => {
+          if (err) return next(err);
+          return res.status(200).json({
+            id: user.id,
+            role: user.role,
+            fullName: user.fullName,
+            email: user.email,
+          });
         });
-      });
-    })(req, res, next);
+      }
+    )(req, res, next);
   });
 
   app.post("/api/logout", (req, res, next) => {

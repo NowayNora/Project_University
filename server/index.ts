@@ -10,6 +10,7 @@ import http from "http";
 import https from "https";
 import path from "path";
 import dotenv from "dotenv";
+import { WebSocketServer } from "ws"; // ⬅ Thêm WebSocket
 dotenv.config();
 
 // Cấu hình SSL
@@ -23,7 +24,7 @@ const credentials = {
 const app = express();
 const PORT_HTTP = 8080;
 const PORT_HTTPS = 8443;
-const HOST = "127.0.0.1";
+const HOST = "localhost";
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -37,7 +38,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   const originalJson = res.json;
   res.json = function (body: any, ...args: any[]) {
     responseBody = body;
-    return originalJson.call(res, body, ...args);
+    return (originalJson as (...params: any[]) => Response).call(
+      res,
+      body,
+      ...args
+    );
   };
 
   res.on("finish", () => {
@@ -79,6 +84,29 @@ const startServer = async () => {
     // Tạo servers
     const httpServer = http.createServer(app);
     const httpsServer = https.createServer(credentials, app);
+    // ➤ **Tạo WebSocket server**
+    const wss = new WebSocketServer({ server: httpsServer });
+
+    wss.on("connection", (ws, req) => {
+      console.log("✅ WebSocket client connected");
+
+      ws.on("message", (message) => {
+        console.log(`📩 Received: ${message}`);
+
+        try {
+          const data = JSON.parse(message.toString()); // Đảm bảo JSON hợp lệ
+          ws.send(JSON.stringify({ type: "response", data }));
+        } catch (error) {
+          ws.send(
+            JSON.stringify({ type: "error", message: "Invalid JSON format" })
+          );
+        }
+      });
+
+      ws.on("close", () => {
+        console.log("❌ WebSocket client disconnected");
+      });
+    });
 
     // Khởi động servers
     httpServer.listen(PORT_HTTP, HOST, () => {

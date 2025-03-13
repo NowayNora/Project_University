@@ -25,7 +25,7 @@ export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
-    allowedHosts: true,
+    // allowedHosts: true,
   };
 
   const vite = await createViteServer({
@@ -67,10 +67,12 @@ export async function setupVite(app: Express, server: Server) {
   });
 }
 
-export function serveStatic(app: Express) {
+export async function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");
 
-  if (!fs.existsSync(distPath)) {
+  try {
+    await fs.access(distPath); // Kiểm tra thư mục tồn tại
+  } catch {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
