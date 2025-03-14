@@ -12,9 +12,20 @@ import { ProtectedRoute } from "@/lib/protected-route";
 function Router() {
   return (
     <Switch>
-      <ProtectedRoute path="/" component={() => <Redirect to="/student/dashboard" />} />
-      <ProtectedRoute path="/student/dashboard" component={StudentDashboard} role="student" />
-      <ProtectedRoute path="/faculty/dashboard" component={FacultyDashboard} role="faculty" />
+      <ProtectedRoute
+        path="/"
+        component={() => <Redirect to="/student/dashboard" />}
+      />
+      <ProtectedRoute
+        path="/student/dashboard"
+        component={StudentDashboard}
+        vaiTro="student"
+      />
+      <ProtectedRoute
+        path="/faculty/dashboard"
+        component={FacultyDashboard}
+        vaiTro="faculty"
+      />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>

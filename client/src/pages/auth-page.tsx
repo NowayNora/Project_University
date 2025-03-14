@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -26,15 +26,17 @@ const loginSchema = z.object({
 // Registration schema
 const registerSchema = z.object({
   tenDangNhap: z.string().min(3, "Tên đăng nhập phải có ít nhất 3 ký tự"),
-  password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"),
+  password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"), // Đổi tên từ matKhau thành password
   fullName: z.string().min(1, "Họ tên không được để trống"),
   email: z.string().email("Email không hợp lệ"),
-  gender: z.enum(["male", "female", "other"], {
-    message: "Giới tính phải là một trong các giá trị: Nam, Nữ, Khác",
-  }),
-  dateOfBirth: z.string().min(1, "Ngày sinh không được để trống"),
   role: z.enum(["student", "faculty"], {
-    message: "Vai trò phải là một trong các giá trị: Sinh viên, Giảng viên",
+    message: "Vai trò phải là Sinh viên hoặc Giảng viên",
+  }),
+  maSv: z.string().optional(), // Chỉ cần cho student
+  maGv: z.string().optional(), // Chỉ cần cho faculty
+  ngaySinh: z.string().min(1, "Ngày sinh không được để trống"),
+  gioiTinh: z.enum(["Nam", "Nữ", "Khác"], {
+    message: "Giới tính phải là Nam, Nữ hoặc Khác",
   }),
 });
 
@@ -45,14 +47,17 @@ export default function AuthPage() {
   const [formMode, setFormMode] = useState<"login" | "register">("login");
 
   // Redirect if already logged in
-  if (user) {
-    if (user.role === "student") {
-      navigate("/student/dashboard");
-    } else {
-      navigate("/faculty/dashboard");
+  useEffect(() => {
+    if (user) {
+      console.log("User data:", user);
+      console.log("Role:", user.role);
+      if (user.role === "student") {
+        navigate("/student/dashboard");
+      } else if (user.role === "faculty") {
+        navigate("/faculty/dashboard");
+      }
     }
-    return null;
-  }
+  }, [user, navigate]);
 
   // Login form
   const loginForm = useForm<z.infer<typeof loginSchema>>({
@@ -76,17 +81,28 @@ export default function AuthPage() {
       password: "",
       fullName: "",
       email: "",
-      gender: "male",
-      dateOfBirth: "",
       role: "student",
+      maSv: "",
+      maGv: "",
+      ngaySinh: "",
+      gioiTinh: "Nam",
     },
   });
 
   const handleRegisterSubmit = (values: z.infer<typeof registerSchema>) => {
-    registerMutation.mutate({
-      ...values,
-      role: activeTab === "student" ? "student" : "faculty",
-    });
+    const registerData = {
+      tenDangNhap: values.tenDangNhap,
+      password: values.password,
+      role: values.role,
+      email: values.email,
+      fullName: values.fullName,
+      maSv: values.role === "student" ? values.maSv : undefined,
+      maGv: values.role === "faculty" ? values.maGv : undefined,
+      ngaySinh: values.ngaySinh,
+      gioiTinh: values.gioiTinh,
+    };
+    console.log("Register data:", registerData);
+    registerMutation.mutate(registerData);
   };
 
   // Switch role (student/faculty)
@@ -264,7 +280,7 @@ export default function AuthPage() {
                         <div className="grid grid-cols-2 gap-4">
                           <FormField
                             control={registerForm.control}
-                            name="gender"
+                            name="gioiTinh"
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>Giới tính</FormLabel>
@@ -282,7 +298,7 @@ export default function AuthPage() {
                           />
                           <FormField
                             control={registerForm.control}
-                            name="dateOfBirth"
+                            name="ngaySinh"
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>Ngày sinh</FormLabel>
@@ -440,7 +456,7 @@ export default function AuthPage() {
                               <FormLabel>Mật khẩu</FormLabel>
                               <FormControl>
                                 <Input
-                                  type="password"
+                                  type="TEXT"
                                   placeholder="Nhập mật khẩu"
                                   {...field}
                                 />
@@ -468,7 +484,7 @@ export default function AuthPage() {
                         <div className="grid grid-cols-2 gap-4">
                           <FormField
                             control={registerForm.control}
-                            name="gender"
+                            name="gioiTinh"
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>Giới tính</FormLabel>
@@ -486,7 +502,7 @@ export default function AuthPage() {
                           />
                           <FormField
                             control={registerForm.control}
-                            name="dateOfBirth"
+                            name="ngaySinh"
                             render={({ field }) => (
                               <FormItem>
                                 <FormLabel>Ngày sinh</FormLabel>

@@ -9,6 +9,12 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import * as schema from "@shared/schema";
 
+declare module "express" {
+  interface Request {
+    user: schema.TaiKhoan; // Giả sử TaiKhoan là kiểu của user từ schema
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
 
@@ -29,14 +35,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   };
 
   const isAuthenticated = (req: any, res: any, next: any) => {
-    if (req.isAuthenticated()) return next();
+    if (req.isAuthenticated() && req.user!) return next();
     res.status(401).json({ message: "Unauthorized" });
   };
 
   const hasRole = (role: string) => {
     return (req: any, res: any, next: any) => {
-      if (req.isAuthenticated() && req.user.role === role) return next();
-      res.status(403).json({ message: "Forbidden" });
+      // Lấy ID quyền hạn dựa trên tên vai trò
+      let roleId: number;
+
+      switch (role) {
+        case "student":
+          roleId = 3; // Giả định ID cho sinh viên
+          break;
+        case "faculty":
+          roleId = 2; // Giả định ID cho giảng viên
+          break;
+        case "admin":
+          roleId = 1; // Giả định ID cho admin
+          break;
+        default:
+          return res.status(403).json({ message: "Vai trò không hợp lệ" });
+      }
+
+      if (req.user!.quyenHanId !== roleId)
+        return res.status(403).json({ message: "Forbidden" });
+
+      next(); // Quan trọng: Gọi next() nếu quyền hạn phù hợp
     };
   };
 
@@ -46,7 +71,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const monHoc = await storage.getAllMonHoc();
       res.json(monHoc);
     } catch (error) {
-      res.status(500).json({ message: "Error fetching courses" });
+      res.status(500).json({ message: "Lỗi khi lấy danh sách môn học" });
     }
   });
 
@@ -57,19 +82,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     hasRole("student"),
     async (req, res) => {
       try {
-        const sinhVien = await storage.getSinhVienByUserId(req.user.id);
-        if (!sinhVien)
-          return res.status(404).json({ message: "Student not found" });
+        const sinhVien = await storage.getSinhVienByUserId(req.user!.id);
+        if (!sinhVien) {
+          return res.status(404).json({ message: "Không tìm thấy sinh viên" });
+        }
         const dangKy = await storage.getDangKyHocPhanBySinhVien(sinhVien.maSv);
         const dangKyWithDetails = await Promise.all(
           dangKy.map(async (dk) => {
             const monHoc = await storage.getMonHoc(dk.monHocId);
-            return { ...dk, monHoc };
+            return { ...dk, monHoc: monHoc || null };
           })
         );
         res.json(dangKyWithDetails);
       } catch (error) {
-        res.status(500).json({ message: "Error fetching enrollments" });
+        res
+          .status(500)
+          .json({ message: "Lỗi khi lấy danh sách đăng ký học phần" });
       }
     }
   );
@@ -86,20 +114,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ),
     async (req, res) => {
       try {
-        const sinhVien = await storage.getSinhVienByUserId(req.user.id);
+        const sinhVien = await storage.getSinhVienByUserId(req.user!.id);
         if (!sinhVien)
-          return res.status(404).json({ message: "Student not found" });
+          return res.status(404).json({ message: "Không tìm thấy sinh viên" });
         const { maMonHoc } = req.validatedBody;
         const monHoc = await storage.getMonHoc(maMonHoc);
         if (!monHoc)
-          return res.status(404).json({ message: "Course not found" });
+          return res.status(404).json({ message: "Không tìm thấy môn học" });
         const existingDangKy = await storage.getDangKyHocPhanBySinhVien(
           sinhVien.maSv
         );
         if (existingDangKy.some((dk) => dk.monHocId === monHoc.id)) {
           return res
             .status(400)
-            .json({ message: "Already enrolled in this course" });
+            .json({ message: "Đã đăng ký môn học này rồi" });
         }
         const dangKy = await storage.createDangKyHocPhan({
           sinhVienId: sinhVien.id,
@@ -111,7 +139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         res.status(201).json(dangKy);
       } catch (error) {
-        res.status(500).json({ message: "Error enrolling in course" });
+        res.status(500).json({ message: "Lỗi khi đăng ký môn học" });
       }
     }
   );
@@ -123,19 +151,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     hasRole("student"),
     async (req, res) => {
       try {
-        const sinhVien = await storage.getSinhVienByUserId(req.user.id);
-        if (!sinhVien)
-          return res.status(404).json({ message: "Student not found" });
+        const sinhVien = await storage.getSinhVienByUserId(req.user!.id);
+        if (!sinhVien) {
+          return res.status(404).json({ message: "Không tìm thấy sinh viên" });
+        }
+
         const lichHoc = await storage.getLichHocBySinhVien(sinhVien.maSv);
         const lichHocWithDetails = await Promise.all(
           lichHoc.map(async (lh) => {
             const monHoc = await storage.getMonHoc(lh.monHocId);
-            return { ...lh, monHoc };
+            return { ...lh, monHoc: monHoc || null };
           })
         );
         res.json(lichHocWithDetails);
       } catch (error) {
-        res.status(500).json({ message: "Error fetching schedule" });
+        console.error("Lỗi trong lichhoc:", error);
+        res.status(500).json({
+          message: "Lỗi khi lấy lịch học",
+          error: error instanceof Error ? error.message : "Lỗi không xác định",
+        });
       }
     }
   );
@@ -147,15 +181,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     hasRole("student"),
     async (req, res) => {
       try {
-        const sinhVien = await storage.getSinhVienByUserId(req.user.id);
+        const sinhVien = await storage.getSinhVienByUserId(req.user!.id);
         if (!sinhVien)
-          return res.status(404).json({ message: "Student not found" });
+          return res.status(404).json({ message: "Không tìm thấy sinh viên" });
         const thanhToan = await storage.getThanhToanHocPhiBySinhVien(
           sinhVien.maSv
         );
         res.json(thanhToan);
       } catch (error) {
-        res.status(500).json({ message: "Error fetching tuition fees" });
+        res.status(500).json({ message: "Lỗi khi lấy thông tin học phí" });
       }
     }
   );
@@ -167,16 +201,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     hasRole("student"),
     validateRequest(
       z.object({
-        soTien: z.number(),
-        hocKy: z.string(),
-        namHoc: z.string(),
+        soTien: z.number().positive(), // Thêm kiểm tra số dương
+        hocKy: z.string().min(1), // Thêm độ dài tối thiểu
+        namHoc: z.string().regex(/^\d{4}-\d{4}$/), // Xác thực định dạng năm
       })
     ),
     async (req, res) => {
       try {
-        const sinhVien = await storage.getSinhVienByUserId(req.user.id);
+        const sinhVien = await storage.getSinhVienByUserId(req.user!.id);
         if (!sinhVien)
-          return res.status(404).json({ message: "Student not found" });
+          return res.status(404).json({ message: "Không tìm thấy sinh viên" });
         const { soTien, hocKy, namHoc } = req.validatedBody;
         const thanhToan = await storage.createThanhToanHocPhi({
           sinhVienId: sinhVien.id,
@@ -190,7 +224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         res.status(201).json(thanhToan);
       } catch (error) {
-        res.status(500).json({ message: "Error processing payment" });
+        res.status(500).json({ message: "Lỗi khi xử lý thanh toán" });
       }
     }
   );
@@ -202,9 +236,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     hasRole("faculty"),
     async (req, res) => {
       try {
-        const giangVien = await storage.getGiangVienByUserId(req.user.id);
+        const giangVien = await storage.getGiangVienByUserId(req.user!.id);
         if (!giangVien)
-          return res.status(404).json({ message: "Faculty not found" });
+          return res.status(404).json({ message: "Không tìm thấy giảng viên" });
         const lichGiangDay = await db
           .select()
           .from(schema.lichgiangday)
@@ -223,7 +257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         res.json(lichWithDetails);
       } catch (error) {
-        res.status(500).json({ message: "Error fetching teaching schedule" });
+        res.status(500).json({ message: "Lỗi khi lấy lịch giảng dạy" });
       }
     }
   );
@@ -238,7 +272,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const nghienCuu = await storage.getAllNghienCuuKhoaHoc();
         res.json(nghienCuu);
       } catch (error) {
-        res.status(500).json({ message: "Error fetching research projects" });
+        res
+          .status(500)
+          .json({ message: "Lỗi khi lấy danh sách nghiên cứu khoa học" });
       }
     }
   );
@@ -252,16 +288,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       z.object({
         tenDeTai: z.string(),
         moTa: z.string().optional(),
-        thoiGianBatDau: z.string(),
+        thoiGianBatDau: z.string().refine((date) => !isNaN(Date.parse(date)), {
+          message: "Ngày không hợp lệ",
+        }),
         thoiGianKetThuc: z.string(),
         kinhPhi: z.number().optional(),
       })
     ),
     async (req, res) => {
       try {
-        const giangVien = await storage.getGiangVienByUserId(req.user.id);
+        const giangVien = await storage.getGiangVienByUserId(req.user!.id);
         if (!giangVien)
-          return res.status(404).json({ message: "Faculty not found" });
+          return res.status(404).json({ message: "Không tìm thấy giảng viên" });
         const { tenDeTai, moTa, thoiGianBatDau, thoiGianKetThuc, kinhPhi } =
           req.validatedBody;
         const nghienCuu = await storage.createNghienCuuKhoaHoc({
@@ -275,7 +313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         res.status(201).json(nghienCuu);
       } catch (error) {
-        res.status(500).json({ message: "Error creating research project" });
+        res.status(500).json({ message: "Lỗi khi tạo nghiên cứu khoa học" });
       }
     }
   );
@@ -286,7 +324,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const thongBao = await storage.getAllThongBao();
       res.json(thongBao);
     } catch (error) {
-      res.status(500).json({ message: "Error fetching announcements" });
+      res.status(500).json({ message: "Lỗi khi lấy danh sách thông báo" });
     }
   });
 
@@ -304,7 +342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ),
     async (req, res) => {
       try {
-        const giangVien = await storage.getGiangVienByUserId(req.user.id);
+        const giangVien = await storage.getGiangVienByUserId(req.user!.id);
         if (!giangVien)
           return res.status(404).json({ message: "Faculty not found" });
         const { tieuDe, noiDung, doiTuong } = req.validatedBody;
