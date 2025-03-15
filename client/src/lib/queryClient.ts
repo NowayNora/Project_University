@@ -11,13 +11,31 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  customHeaders: Record<string, string> = {}
 ): Promise<Response> {
+  const headers: Record<string, string> = { ...customHeaders };
+
+  // Nếu data không phải FormData, set Content-Type là application/json
+  if (data && !(data instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
+    headers,
+    body: data
+      ? data instanceof FormData
+        ? data
+        : JSON.stringify(data)
+      : undefined,
+    credentials: "include", // Giữ credentials để hỗ trợ session
   });
+  // const res = await fetch(url, {
+  //   method,
+  //   headers: data ? { "Content-Type": "application/json" } : {},
+  //   body: data ? JSON.stringify(data) : undefined,
+  //   credentials: "include",
+  // });
 
   await throwIfResNotOk(res);
   return res;

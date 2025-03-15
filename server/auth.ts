@@ -11,6 +11,7 @@ declare global {
     interface User {
       id: number;
       tenDangNhap: string;
+      quyenHanId: number; // Thêm quyenHanId
       role: "student" | "faculty" | "admin";
       fullName: string;
       email: string;
@@ -119,6 +120,7 @@ export function setupAuth(app: Express) {
       done(null, {
         id: user.id,
         tenDangNhap: user.tenDangNhap,
+        quyenHanId: user.quyenHanId, // Thêm dòng này
         role: getRoleFromQuyenHanId(user.quyenHanId),
         fullName,
         email: user.email,

@@ -7,6 +7,7 @@ import AuthPage from "@/pages/auth-page";
 import { AuthProvider } from "@/hooks/use-auth";
 import StudentDashboard from "@/pages/student/dashboard";
 import FacultyDashboard from "@/pages/faculty/dashboard";
+import StudentProfile from "@/pages/student/profile"; // Thêm import
 import { ProtectedRoute } from "@/lib/protected-route";
 
 function Router() {
@@ -19,6 +20,11 @@ function Router() {
       <ProtectedRoute
         path="/student/dashboard"
         component={StudentDashboard}
+        vaiTro="student"
+      />
+      <ProtectedRoute
+        path="/student/profile" // Thêm route mới
+        component={StudentProfile}
         vaiTro="student"
       />
       <ProtectedRoute

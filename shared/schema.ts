@@ -266,6 +266,17 @@ export const sinhvien = mysqlTable("sinhvien", {
     "Nghỉ học",
     "Đình chỉ",
   ]).default("Đang học"),
+  danToc: varchar("dan_toc", { length: 50 }), // Thêm dân tộc
+  tonGiao: varchar("ton_giao", { length: 50 }), // Thêm tôn giáo
+  truongTHPT: varchar("truong_thpt", { length: 100 }), // Trường THPT
+  namTotNghiepTHPT: int("nam_tot_nghiep_thpt"), // Năm tốt nghiệp THPT
+  phuongXaTHPT: varchar("phuong_xa_thpt", { length: 100 }), // Phường/Xã THPT
+  quanHuyenTHPT: varchar("quan_huyen_thpt", { length: 100 }), // Quận/Huyện THPT
+  tinhThanhTHPT: varchar("tinh_thanh_thpt", { length: 100 }), // Tỉnh/Thành THPT
+  hoTenPhuHuynh: varchar("ho_ten_phu_huynh", { length: 100 }), // Họ tên phụ huynh
+  diaChiPhuHuynh: text("dia_chi_phu_huynh"), // Địa chỉ phụ huynh
+  sdtPhuHuynh: varchar("sdt_phu_huynh", { length: 20 }), // SĐT phụ huynh
+  avatar: varchar("avatar", { length: 1000 }), // Thêm trường avatar để lưu đường dẫn ảnh
 });
 
 // Bảng taikhoan

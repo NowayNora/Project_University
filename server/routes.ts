@@ -8,10 +8,19 @@ import { fromZodError } from "zod-validation-error";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
 import * as schema from "@shared/schema";
+import multer from "multer";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 declare module "express" {
   interface Request {
     user: schema.TaiKhoan; // Giả sử TaiKhoan là kiểu của user từ schema
+    file?: Express.Multer.File; // Thêm kiểu cho file upload
   }
 }
 
@@ -41,29 +50,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const hasRole = (role: string) => {
     return (req: any, res: any, next: any) => {
-      // Lấy ID quyền hạn dựa trên tên vai trò
-      let roleId: number;
-
-      switch (role) {
-        case "student":
-          roleId = 3; // Giả định ID cho sinh viên
-          break;
-        case "faculty":
-          roleId = 2; // Giả định ID cho giảng viên
-          break;
-        case "admin":
-          roleId = 1; // Giả định ID cho admin
-          break;
-        default:
-          return res.status(403).json({ message: "Vai trò không hợp lệ" });
-      }
-
-      if (req.user!.quyenHanId !== roleId)
+      console.log("User role in hasRole:", req.user.role); // Thêm log
+      if (req.user!.role !== role)
         return res.status(403).json({ message: "Forbidden" });
-
-      next(); // Quan trọng: Gọi next() nếu quyền hạn phù hợp
+      next();
     };
   };
+
+  // const hasRole = (role: string) => {
+  //   return (req: any, res: any, next: any) => {
+  //     // Lấy ID quyền hạn dựa trên tên vai trò
+  //     let roleId: number;
+
+  //     switch (role) {
+  //       case "student":
+  //         roleId = 3; // Giả định ID cho sinh viên
+  //         break;
+  //       case "faculty":
+  //         roleId = 2; // Giả định ID cho giảng viên
+  //         break;
+  //       case "admin":
+  //         roleId = 1; // Giả định ID cho admin
+  //         break;
+  //       default:
+  //         return res.status(403).json({ message: "Vai trò không hợp lệ" });
+  //     }
+
+  //     if (req.user!.quyenHanId !== roleId)
+  //       return res.status(403).json({ message: "Forbidden" });
+
+  //     next(); // Quan trọng: Gọi next() nếu quyền hạn phù hợp
+  //   };
+  // };
+  // Cấu hình multer để xử lý upload file
+  const storageConfig = multer.diskStorage({
+    destination: async (req, file, cb) => {
+      const uploadsPath = resolve(__dirname, "..", "uploads");
+      try {
+        await fs.access(uploadsPath); // Kiểm tra thư mục uploads tồn tại
+      } catch {
+        await fs.mkdir(uploadsPath, { recursive: true }); // Tạo thư mục nếu chưa tồn tại
+      }
+      cb(null, uploadsPath);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, `${uniqueSuffix}-${file.originalname}`);
+    },
+  });
+
+  const upload = multer({ storage: storageConfig });
+
+  app.post(
+    "/api/upload-avatar",
+    isAuthenticated,
+    hasRole("student"),
+    upload.single("avatar"),
+    async (req: any, res: any) => {
+      console.log("User in upload-avatar:", req.user); // Thêm log này
+      console.log("Request file:", req.file);
+      console.log("User:", req.user);
+      try {
+        if (!req.file) {
+          return res.status(400).json({ message: "No file uploaded" });
+        }
+
+        const sinhVien = await storage.getSinhVienByUserId(req.user!.id);
+        if (!sinhVien) {
+          return res.status(404).json({ message: "Không tìm thấy sinh viên" });
+        }
+
+        // Chuẩn hóa đường dẫn để chỉ lấy tên file
+        const relativePath = path.basename(req.file.path); // Lấy tên file thay vì đường dẫn đầy đủ
+        console.log("Relative path:", relativePath); // Log để kiểm tra
+
+        await db
+          .update(schema.sinhvien)
+          .set({ avatar: relativePath })
+          .where(eq(schema.sinhvien.id, sinhVien.id));
+
+        res
+          .status(200)
+          .json({ message: "Upload successful", avatar: relativePath });
+      } catch (error) {
+        console.error("Upload error:", error);
+        res.status(500).json({ message: "Error uploading avatar", error });
+      }
+    }
+  );
+
+  // Cập nhật API /api/profile để trả về avatar
+  app.get("/api/profile", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const { role } = req.user;
+      if (role === "student") {
+        const sinhVien = await storage.getSinhVienByUserId(req.user!.id);
+        if (!sinhVien) {
+          return res.status(404).json({ message: "Không tìm thấy sinh viên" });
+        }
+        console.log("SinhVien data:", sinhVien);
+        return res.json({ user: req.user, sinhVien });
+      } else if (role === "faculty") {
+        const giangVien = await storage.getGiangVienByUserId(req.user!.id);
+        if (!giangVien) {
+          return res.status(404).json({ message: "Không tìm thấy giảng viên" });
+        }
+        return res.json({ user: req.user, giangVien });
+      }
+      return res.status(400).json({ message: "Invalid user role" });
+    } catch (error) {
+      return res.status(500).json({ message: "Error fetching profile" });
+    }
+  });
 
   // Lấy danh sách môn học
   app.get("/api/monhoc", isAuthenticated, async (_req, res) => {

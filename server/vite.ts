@@ -42,6 +42,41 @@ export async function setupVite(app: Express, server: Server) {
     appType: "custom",
   });
 
+  // Thêm đoạn code để phục vụ file tĩnh từ thư mục uploads trong môi trường dev
+  const distPath = path.resolve(__dirname, "public");
+  const uploadsPath = path.resolve(__dirname, "..", "uploads");
+  try {
+    await fs.access(distPath); // Kiểm tra thư mục tồn tại
+    await fs.access(uploadsPath); // Kiểm tra thư mục uploads tồn tại
+  } catch {
+    await fs.mkdir(uploadsPath, { recursive: true }); // Tạo thư mục nếu chưa tồn tại
+  }
+  app.use("/uploads", express.static(uploadsPath)); // Phục vụ file tĩnh từ uploads/
+
+  app.use(vite.middlewares);
+  app.use("*", async (req, res, next) => {
+    const url = req.originalUrl;
+
+    try {
+      const clientTemplate = path.resolve(
+        __dirname,
+        "..",
+        "client",
+        "index.html"
+      );
+      let template = await fs.readFile(clientTemplate, "utf-8");
+      template = template.replace(
+        `src="/src/main.tsx"`,
+        `src="/src/main.tsx?v=${nanoid()}"`
+      );
+      const page = await vite.transformIndexHtml(url, template);
+      res.status(200).set({ "Content-Type": "text/html" }).end(page);
+    } catch (e) {
+      vite.ssrFixStacktrace(e as Error);
+      next(e);
+    }
+  });
+
   app.use(vite.middlewares);
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
@@ -69,9 +104,11 @@ export async function setupVite(app: Express, server: Server) {
 
 export async function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");
+  const uploadsPath = path.resolve(__dirname, "..", "../uploads"); // Thêm dòng này
 
   try {
     await fs.access(distPath); // Kiểm tra thư mục tồn tại
+    await fs.access(uploadsPath); // Kiểm tra thư mục uploads tồn tại
   } catch {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
@@ -79,6 +116,7 @@ export async function serveStatic(app: Express) {
   }
 
   app.use(express.static(distPath));
+  app.use("/uploads", express.static(uploadsPath)); // Phục vụ thư mục uploads
   app.use("*", (_req, res) => {
     res.sendFile(path.resolve(distPath, "index.html"));
   });
