@@ -23,23 +23,6 @@ const loginSchema = z.object({
   password: z.string().min(1, "Mật khẩu không được để trống"),
 });
 
-// Registration schema
-const registerSchema = z.object({
-  tenDangNhap: z.string().min(3, "Tên đăng nhập phải có ít nhất 3 ký tự"),
-  password: z.string().min(6, "Mật khẩu phải có ít nhất 6 ký tự"), // Đổi tên từ matKhau thành password
-  fullName: z.string().min(1, "Họ tên không được để trống"),
-  email: z.string().email("Email không hợp lệ"),
-  role: z.enum(["student", "faculty"], {
-    message: "Vai trò phải là Sinh viên hoặc Giảng viên",
-  }),
-  maSv: z.string().optional(), // Chỉ cần cho student
-  maGv: z.string().optional(), // Chỉ cần cho faculty
-  ngaySinh: z.string().min(1, "Ngày sinh không được để trống"),
-  gioiTinh: z.enum(["Nam", "Nữ", "Khác"], {
-    message: "Giới tính phải là Nam, Nữ hoặc Khác",
-  }),
-});
-
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
   const [, navigate] = useLocation();
@@ -73,42 +56,9 @@ export default function AuthPage() {
     loginMutation.mutate(values);
   };
 
-  // Register form
-  const registerForm = useForm<z.infer<typeof registerSchema>>({
-    resolver: zodResolver(registerSchema),
-    defaultValues: {
-      tenDangNhap: "",
-      password: "",
-      fullName: "",
-      email: "",
-      role: "student",
-      maSv: "",
-      maGv: "",
-      ngaySinh: "",
-      gioiTinh: "Nam",
-    },
-  });
-
-  const handleRegisterSubmit = (values: z.infer<typeof registerSchema>) => {
-    const registerData = {
-      tenDangNhap: values.tenDangNhap,
-      password: values.password,
-      role: values.role,
-      email: values.email,
-      fullName: values.fullName,
-      maSv: values.role === "student" ? values.maSv : undefined,
-      maGv: values.role === "faculty" ? values.maGv : undefined,
-      ngaySinh: values.ngaySinh,
-      gioiTinh: values.gioiTinh,
-    };
-    console.log("Register data:", registerData);
-    registerMutation.mutate(registerData);
-  };
-
   // Switch role (student/faculty)
   const handleRoleChange = (role: string) => {
     setActiveTab(role);
-    registerForm.setValue("role", role === "student" ? "student" : "faculty");
   };
 
   return (
@@ -209,146 +159,9 @@ export default function AuthPage() {
                         </Button>
                       </form>
                     </Form>
-                    <p className="text-center mt-4 text-sm text-gray-600">
-                      Chưa có tài khoản?{" "}
-                      <button
-                        onClick={() => setFormMode("register")}
-                        className="text-primary hover:underline"
-                      >
-                        Đăng ký ngay
-                      </button>
-                    </p>
                   </>
                 ) : (
-                  <>
-                    <Form {...registerForm}>
-                      <form
-                        onSubmit={registerForm.handleSubmit(
-                          handleRegisterSubmit
-                        )}
-                        className="space-y-4"
-                      >
-                        <FormField
-                          control={registerForm.control}
-                          name="tenDangNhap"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Tên đăng nhập</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="Nhập tên đăng nhập"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={registerForm.control}
-                          name="password"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Mật khẩu</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="password"
-                                  placeholder="Nhập mật khẩu"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={registerForm.control}
-                          name="fullName"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Họ và tên</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="Nhập họ và tên"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <div className="grid grid-cols-2 gap-4">
-                          <FormField
-                            control={registerForm.control}
-                            name="gioiTinh"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Giới tính</FormLabel>
-                                <select
-                                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                  {...field}
-                                >
-                                  <option value="male">Nam</option>
-                                  <option value="female">Nữ</option>
-                                  <option value="other">Khác</option>
-                                </select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={registerForm.control}
-                            name="ngaySinh"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Ngày sinh</FormLabel>
-                                <FormControl>
-                                  <Input type="date" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                        <FormField
-                          control={registerForm.control}
-                          name="email"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Email</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="email"
-                                  placeholder="Nhập địa chỉ email"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <Button
-                          type="submit"
-                          className="w-full"
-                          disabled={registerMutation.isPending}
-                        >
-                          {registerMutation.isPending ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : null}
-                          Đăng ký
-                        </Button>
-                      </form>
-                    </Form>
-                    <p className="text-center mt-4 text-sm text-gray-600">
-                      Đã có tài khoản?{" "}
-                      <button
-                        onClick={() => setFormMode("login")}
-                        className="text-primary hover:underline"
-                      >
-                        Đăng nhập
-                      </button>
-                    </p>
-                  </>
+                  <></>
                 )}
               </TabsContent>
 
@@ -413,146 +226,9 @@ export default function AuthPage() {
                         </Button>
                       </form>
                     </Form>
-                    <p className="text-center mt-4 text-sm text-gray-600">
-                      Chưa có tài khoản?{" "}
-                      <button
-                        onClick={() => setFormMode("register")}
-                        className="text-primary hover:underline"
-                      >
-                        Đăng ký ngay
-                      </button>
-                    </p>
                   </>
                 ) : (
-                  <>
-                    <Form {...registerForm}>
-                      <form
-                        onSubmit={registerForm.handleSubmit(
-                          handleRegisterSubmit
-                        )}
-                        className="space-y-4"
-                      >
-                        <FormField
-                          control={registerForm.control}
-                          name="tenDangNhap"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Tên đăng nhập</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="Nhập tên đăng nhập"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={registerForm.control}
-                          name="password"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Mật khẩu</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="TEXT"
-                                  placeholder="Nhập mật khẩu"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={registerForm.control}
-                          name="fullName"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Họ và tên</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="Nhập họ và tên"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <div className="grid grid-cols-2 gap-4">
-                          <FormField
-                            control={registerForm.control}
-                            name="gioiTinh"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Giới tính</FormLabel>
-                                <select
-                                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                  {...field}
-                                >
-                                  <option value="male">Nam</option>
-                                  <option value="female">Nữ</option>
-                                  <option value="other">Khác</option>
-                                </select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={registerForm.control}
-                            name="ngaySinh"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Ngày sinh</FormLabel>
-                                <FormControl>
-                                  <Input type="date" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                        <FormField
-                          control={registerForm.control}
-                          name="email"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Email</FormLabel>
-                              <FormControl>
-                                <Input
-                                  type="email"
-                                  placeholder="Nhập địa chỉ email"
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <Button
-                          type="submit"
-                          className="w-full"
-                          disabled={registerMutation.isPending}
-                        >
-                          {registerMutation.isPending ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : null}
-                          Đăng ký
-                        </Button>
-                      </form>
-                    </Form>
-                    <p className="text-center mt-4 text-sm text-gray-600">
-                      Đã có tài khoản?{" "}
-                      <button
-                        onClick={() => setFormMode("login")}
-                        className="text-primary hover:underline"
-                      >
-                        Đăng nhập
-                      </button>
-                    </p>
-                  </>
+                  <></>
                 )}
               </TabsContent>
             </Tabs>

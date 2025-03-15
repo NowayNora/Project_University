@@ -7,3 +7,42 @@
   "fullName": "Trần Văn C",
   "lopId": 1
 }
+
+{
+  "tenDangNhap": "sv006",
+  "password": "password123",
+  "role": "student",
+  "email": "sv006@example.com",
+  "fullName": "Nguyễn Thị F",
+  "maSv": "SV006",
+  "ngaySinh": "2002-05-15T00:00:00Z",
+  "gioiTinh": "Nữ",
+  "diaChi": "123 Đường ABC, Quận 1, TP.HCM",
+  "soDienThoai": "0123456789",
+  "lopId": 1,
+  "danToc": "Kinh",
+  "tonGiao": "Phật giáo",
+  "truongTHPT": "THPT Lê Quý Đôn",
+  "namTotNghiepTHPT": 2020,
+  "phuongXaTHPT": "Phường 5",
+  "quanHuyenTHPT": "Quận 3",
+  "tinhThanhTHPT": "TP.HCM",
+  "hoTenPhuHuynh": "Nguyễn Văn G",
+  "diaChiPhuHuynh": "456 Đường XYZ, Quận 2, TP.HCM",
+  "sdtPhuHuynh": "0987654321"
+}
+
+{
+  "tenDangNhap": "gv003",
+  "password": "securepass456",
+  "role": "faculty",
+  "email": "gv003@example.com",
+  "fullName": "Trần Văn H",
+  "maGv": "GV003",
+  "ngaySinh": "1985-08-20T00:00:00Z",
+  "gioiTinh": "Nam",
+  "diaChi": "789 Đường DEF, Quận 7, TP.HCM",
+  "soDienThoai": "0912345678",
+  "chuyenMon": "Công nghệ thông tin",
+  "hocVi": "Tiến sĩ"
+}
