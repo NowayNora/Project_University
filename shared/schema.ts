@@ -182,6 +182,18 @@ export const monhoc = mysqlTable("monhoc", {
   moTa: text("mo_ta"),
 });
 
+// Bảng hocky_namhoc
+export const hockyNamHoc = mysqlTable("hocky_namhoc", {
+  id: serial("id").primaryKey(),
+  hocKy: varchar("hoc_ky", { length: 20 }).notNull(),
+  namHoc: varchar("nam_hoc", { length: 20 }).notNull(),
+  ngayBatDau: date("ngay_bat_dau").notNull(),
+  ngayKetThuc: date("ngay_ket_thuc").notNull(),
+  trangThai: mysqlEnum("trang_thai", ["Hoạt động", "Kết thúc"]).default(
+    "Hoạt động"
+  ),
+});
+
 // Bảng nganh
 export const nganh = mysqlTable("nganh", {
   id: serial("id").primaryKey(),
@@ -408,6 +420,7 @@ export const insertLichHocSchema = createInsertSchema(lichhoc);
 export const insertLichSuDangNhapSchema = createInsertSchema(lichsudangnhap);
 export const insertLopSchema = createInsertSchema(lop);
 export const insertMonHocSchema = createInsertSchema(monhoc);
+export const insertHocKyNamHocSchema = createInsertSchema(hockyNamHoc);
 export const insertNganhSchema = createInsertSchema(nganh);
 export const insertNghienCuuKhoaHocSchema =
   createInsertSchema(nghiencuukhoahoc);
@@ -452,6 +465,8 @@ export type Lop = typeof lop.$inferSelect;
 export type InsertLop = z.infer<typeof insertLopSchema>;
 export type MonHoc = typeof monhoc.$inferSelect;
 export type InsertMonHoc = z.infer<typeof insertMonHocSchema>;
+export type HocKyNamHoc = typeof hockyNamHoc.$inferSelect;
+export type InsertHocKyNamHoc = z.infer<typeof insertHocKyNamHocSchema>;
 export type Nganh = typeof nganh.$inferSelect;
 export type InsertNganh = z.infer<typeof insertNganhSchema>;
 export type NghienCuuKhoaHoc = typeof nghiencuukhoahoc.$inferSelect;

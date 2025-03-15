@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "../../lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { StudentSidebar } from "@/components/student/sidebar";
-import { PlaceholderImage } from "@/components/ui/placeholder-image";
 
 export default function StudentProfile() {
   const { user } = useAuth();
@@ -17,9 +16,7 @@ export default function StudentProfile() {
     queryKey: ["/api/profile"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/profile");
-      const data = await res.json();
-      console.log("Profile data:", data); // Thêm log này
-      return data;
+      return res.json();
     },
     enabled: !!user,
   });
@@ -44,14 +41,10 @@ export default function StudentProfile() {
   const lop = profile?.lop;
   const nganh = profile?.nganh;
 
-  // Xử lý ảnh đại diện
-  const avatarUrl =
-    avatarPreview ||
-    (sinhVien?.avatar
-      ? `${import.meta.env.VITE_API_URL}/uploads/${sinhVien.avatar}`
-      : null);
-  console.log("Avatar URL:", avatarUrl); // Log để kiểm tra URL
-
+  // Xử lý ảnh: Nếu không có avatar, sử dụng placeholder
+  const avatarUrl = sinhVien?.avatar
+    ? `${import.meta.env.VITE_API_URL}/uploads/${sinhVien.avatar}`
+    : "https://via.placeholder.com/120?text=Chưa+có+ảnh";
   // Xử lý upload ảnh
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -72,9 +65,12 @@ export default function StudentProfile() {
     if (fileInput.files && fileInput.files[0]) {
       formData.append("avatar", fileInput.files[0]);
       try {
-        await apiRequest("POST", "/api/upload-avatar", formData);
+        const response = await apiRequest(
+          "POST",
+          "/api/upload-avatar",
+          formData
+        );
         alert("Tải ảnh thành công!");
-        setAvatarPreview(null); // Reset preview sau khi upload
         window.location.reload();
       } catch (error) {
         alert("Lỗi khi tải ảnh: " + (error as Error).message);
@@ -91,25 +87,15 @@ export default function StudentProfile() {
       <div className="flex-1 p-6">
         <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
           <div className="flex items-center space-x-6 mb-6">
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt="Ảnh học viên"
-                className="w-32 h-32 rounded-full object-cover border border-gray-300"
-                // onError={(e) => {
-                //   console.error("Image failed to load");
-                //   (e.target as HTMLImageElement).src = "";
-                //   setAvatarPreview(null);
-                // }}
-              />
-            ) : (
-              <PlaceholderImage
-                text="Chưa có ảnh"
-                width={128}
-                height={128}
-                className="rounded-full border border-gray-300"
-              />
-            )}
+            <img
+              src={avatarPreview || avatarUrl}
+              alt="Ảnh học viên"
+              className="w-32 h-32 rounded-full object-cover border border-gray-300"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src =
+                  "https://via.placeholder.com/120?text=Chưa+có+ảnh";
+              }}
+            />
             <div>
               <h1 className="text-2xl font-bold text-gray-800">
                 Thông tin học viên

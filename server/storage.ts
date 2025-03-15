@@ -1,6 +1,6 @@
 import { db } from "./db";
 import * as schema from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, lte, gte } from "drizzle-orm";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import {
@@ -26,41 +26,66 @@ import {
   InsertThanhVienNghienCuu,
   ThongBao,
   InsertThongBao,
+  HocKyNamHoc, // Thêm type HocKyNamHoc
 } from "@shared/schema";
 
 const MemoryStore = createMemoryStore(session);
 
 export interface IStorage {
+  // User
   getUser(id: number): Promise<TaiKhoan | undefined>;
   getUserByUsername(username: string): Promise<TaiKhoan | undefined>;
   createUser(user: InsertTaiKhoan): Promise<TaiKhoan>;
+  updateUser(id: number, user: Partial<InsertTaiKhoan>): Promise<TaiKhoan>;
+
+  // SinhVien
   getSinhVienByUserId(userId: number): Promise<SinhVien | undefined>;
-  getGiangVienByUserId(userId: number): Promise<GiangVien | undefined>;
   getSinhVien(maSv: string): Promise<SinhVien | undefined>;
   createSinhVien(sinhvien: InsertSinhVien): Promise<SinhVien>;
+  updateSinhVien(
+    id: number,
+    sinhvien: Partial<InsertSinhVien>
+  ): Promise<SinhVien>;
+
+  // GiangVien
+  getGiangVienByUserId(userId: number): Promise<GiangVien | undefined>;
   getGiangVien(maGv: string): Promise<GiangVien | undefined>;
   createGiangVien(giangvien: InsertGiangVien): Promise<GiangVien>;
-  getMonHoc(maMon: string): Promise<MonHoc | undefined>;
+
+  // MonHoc
+  getMonHoc(id: number): Promise<MonHoc | undefined>;
   getAllMonHoc(): Promise<MonHoc[]>;
   createMonHoc(monhoc: InsertMonHoc): Promise<MonHoc>;
+
+  // Lop
   getLop(maLop: string): Promise<Lop | undefined>;
   createLop(lop: InsertLop): Promise<Lop>;
+
+  // DangKyHocPhan
   getDangKyHocPhan(id: number): Promise<DangKyHocPhan | undefined>;
   getDangKyHocPhanBySinhVien(maSv: string): Promise<DangKyHocPhan[]>;
   createDangKyHocPhan(dangky: InsertDangKyHocPhan): Promise<DangKyHocPhan>;
+
+  // LichHoc
   getLichHoc(id: number): Promise<LichHoc | undefined>;
   getLichHocBySinhVien(maSv: string): Promise<LichHoc[]>;
   createLichHoc(lichhoc: InsertLichHoc): Promise<LichHoc>;
+
+  // ThanhToanHocPhi
   getThanhToanHocPhi(id: number): Promise<ThanhToanHocPhi | undefined>;
   getThanhToanHocPhiBySinhVien(maSv: string): Promise<ThanhToanHocPhi[]>;
   createThanhToanHocPhi(
     thanhToan: InsertThanhToanHocPhi
   ): Promise<ThanhToanHocPhi>;
+
+  // NghienCuuKhoaHoc
   getNghienCuuKhoaHoc(id: number): Promise<NghienCuuKhoaHoc | undefined>;
   getAllNghienCuuKhoaHoc(): Promise<NghienCuuKhoaHoc[]>;
   createNghienCuuKhoaHoc(
     project: InsertNghienCuuKhoaHoc
   ): Promise<NghienCuuKhoaHoc>;
+
+  // ThanhVienNghienCuu
   getThanhVienNghienCuu(id: number): Promise<ThanhVienNghienCuu | undefined>;
   getThanhVienNghienCuuByNghienCuu(
     maNghienCuu: number
@@ -68,9 +93,14 @@ export interface IStorage {
   createThanhVienNghienCuu(
     member: InsertThanhVienNghienCuu
   ): Promise<ThanhVienNghienCuu>;
+
+  // ThongBao
   getThongBao(id: number): Promise<ThongBao | undefined>;
   getAllThongBao(): Promise<ThongBao[]>;
   createThongBao(thongbao: InsertThongBao): Promise<ThongBao>;
+
+  getCurrentHocKyNamHoc(): Promise<HocKyNamHoc | undefined>;
+
   sessionStore: session.Store;
 }
 
@@ -81,314 +111,342 @@ export class MySQLStorage implements IStorage {
     this.sessionStore = new MemoryStore({ checkPeriod: 86400000 });
   }
 
+  // Hàm trợ giúp chung để lấy bản ghi đơn
+  private async getSingle<T>(
+    table: any,
+    condition: any
+  ): Promise<T | undefined> {
+    try {
+      const result = await db.select().from(table).where(condition).limit(1);
+      return result[0];
+    } catch (error) {
+      console.error(`Error fetching from ${table.name}:`, error);
+      throw new Error(`Failed to fetch from ${table.name}`);
+    }
+  }
+
+  // Hàm trợ giúp chung để tạo bản ghi
+  private async createSingle<T>(table: any, data: any): Promise<T> {
+    try {
+      const [insertResult] = await db.insert(table).values(data);
+      const result = await this.getSingle<T>(
+        table,
+        eq(table.id, insertResult.insertId)
+      );
+      if (!result) throw new Error("Failed to retrieve created record");
+      return result;
+    } catch (error) {
+      console.error(`Error creating in ${table.name}:`, error);
+      throw new Error(`Failed to create in ${table.name}`);
+    }
+  }
+
+  // Hàm trợ giúp chung để cập nhật bản ghi
+  private async updateSingle<T>(
+    table: any,
+    id: number,
+    data: Partial<T>
+  ): Promise<T> {
+    try {
+      await db.update(table).set(data).where(eq(table.id, id));
+      const result = await this.getSingle<T>(table, eq(table.id, id));
+      if (!result) throw new Error("Record not found after update");
+      return result;
+    } catch (error) {
+      console.error(`Error updating in ${table.name}:`, error);
+      throw new Error(`Failed to update in ${table.name}`);
+    }
+  }
+
+  // User
   async getUser(id: number): Promise<TaiKhoan | undefined> {
-    const result = await db
-      .select()
-      .from(schema.taikhoan)
-      .where(eq(schema.taikhoan.id, id))
-      .limit(1);
-    return result[0];
+    return this.getSingle<TaiKhoan>(
+      schema.taikhoan,
+      eq(schema.taikhoan.id, id)
+    );
   }
 
   async getUserByUsername(username: string): Promise<TaiKhoan | undefined> {
-    const result = await db
-      .select()
-      .from(schema.taikhoan)
-      .where(eq(schema.taikhoan.tenDangNhap, username))
-      .limit(1);
-    return result[0];
+    return this.getSingle<TaiKhoan>(
+      schema.taikhoan,
+      eq(schema.taikhoan.tenDangNhap, username)
+    );
   }
 
   async createUser(user: InsertTaiKhoan): Promise<TaiKhoan> {
-    const [insertResult] = await db.insert(schema.taikhoan).values(user);
-    const result = await db
-      .select()
-      .from(schema.taikhoan)
-      .where(eq(schema.taikhoan.id, insertResult.insertId))
-      .limit(1);
-    return result[0];
+    return this.createSingle<TaiKhoan>(schema.taikhoan, user);
   }
 
+  async updateUser(
+    id: number,
+    user: Partial<InsertTaiKhoan>
+  ): Promise<TaiKhoan> {
+    return this.updateSingle<TaiKhoan>(schema.taikhoan, id, user);
+  }
+
+  // SinhVien
   async getSinhVienByUserId(userId: number): Promise<SinhVien | undefined> {
     const user = await this.getUser(userId);
     if (!user?.sinhVienId) return undefined;
-    const result = await db
-      .select()
-      .from(schema.sinhvien)
-      .where(eq(schema.sinhvien.id, user.sinhVienId))
-      .limit(1);
-    return result[0];
-  }
-
-  async getGiangVienByUserId(userId: number): Promise<GiangVien | undefined> {
-    const user = await this.getUser(userId);
-    if (!user?.giangVienId) return undefined;
-    const result = await db
-      .select()
-      .from(schema.giangvien)
-      .where(eq(schema.giangvien.id, user.giangVienId))
-      .limit(1);
-    return result[0];
+    return this.getSingle<SinhVien>(
+      schema.sinhvien,
+      eq(schema.sinhvien.id, user.sinhVienId)
+    );
   }
 
   async getSinhVien(maSv: string): Promise<SinhVien | undefined> {
-    const result = await db
-      .select()
-      .from(schema.sinhvien)
-      .where(eq(schema.sinhvien.maSv, maSv))
-      .limit(1);
-    return result[0];
+    return this.getSingle<SinhVien>(
+      schema.sinhvien,
+      eq(schema.sinhvien.maSv, maSv)
+    );
   }
 
   async createSinhVien(sinhvien: InsertSinhVien): Promise<SinhVien> {
-    const [insertResult] = await db.insert(schema.sinhvien).values(sinhvien);
-    const result = await db
-      .select()
-      .from(schema.sinhvien)
-      .where(eq(schema.sinhvien.id, insertResult.insertId))
-      .limit(1);
-    return result[0];
+    return this.createSingle<SinhVien>(schema.sinhvien, sinhvien);
+  }
+
+  async updateSinhVien(
+    id: number,
+    sinhvien: Partial<InsertSinhVien>
+  ): Promise<SinhVien> {
+    return this.updateSingle<SinhVien>(schema.sinhvien, id, sinhvien);
+  }
+
+  // GiangVien
+  async getGiangVienByUserId(userId: number): Promise<GiangVien | undefined> {
+    const user = await this.getUser(userId);
+    if (!user?.giangVienId) return undefined;
+    return this.getSingle<GiangVien>(
+      schema.giangvien,
+      eq(schema.giangvien.id, user.giangVienId)
+    );
   }
 
   async getGiangVien(maGv: string): Promise<GiangVien | undefined> {
-    const result = await db
-      .select()
-      .from(schema.giangvien)
-      .where(eq(schema.giangvien.maGv, maGv))
-      .limit(1);
-    return result[0];
+    return this.getSingle<GiangVien>(
+      schema.giangvien,
+      eq(schema.giangvien.maGv, maGv)
+    );
   }
 
   async createGiangVien(giangvien: InsertGiangVien): Promise<GiangVien> {
-    const [insertResult] = await db.insert(schema.giangvien).values(giangvien);
-    const result = await db
-      .select()
-      .from(schema.giangvien)
-      .where(eq(schema.giangvien.id, insertResult.insertId))
-      .limit(1);
-    return result[0];
+    return this.createSingle<GiangVien>(schema.giangvien, giangvien);
   }
 
-  async getMonHoc(maMon: string): Promise<MonHoc | undefined> {
-    const result = await db
-      .select()
-      .from(schema.monhoc)
-      .where(eq(schema.monhoc.id, maMon))
-      .limit(1);
-    return result[0];
+  // MonHoc
+  async getMonHoc(id: number): Promise<MonHoc | undefined> {
+    return this.getSingle<MonHoc>(schema.monhoc, eq(schema.monhoc.id, id));
   }
 
   async getAllMonHoc(): Promise<MonHoc[]> {
-    return await db.select().from(schema.monhoc);
+    try {
+      return await db.select().from(schema.monhoc);
+    } catch (error) {
+      console.error("Error fetching all MonHoc:", error);
+      throw new Error("Failed to fetch all courses");
+    }
+  }
+
+  // Thêm phương thức getCurrentHocKyNamHoc
+  async getCurrentHocKyNamHoc(): Promise<HocKyNamHoc | undefined> {
+    try {
+      const currentDate = new Date();
+      const result = await db
+        .select()
+        .from(schema.hockyNamHoc)
+        .where(
+          and(
+            eq(schema.hockyNamHoc.trangThai, "Hoạt động"),
+            lte(schema.hockyNamHoc.ngayBatDau, currentDate),
+            gte(schema.hockyNamHoc.ngayKetThuc, currentDate)
+          )
+        )
+        .limit(1);
+      return result[0];
+    } catch (error) {
+      console.error("Error fetching current HocKyNamHoc:", error);
+      throw new Error("Failed to fetch current semester and year");
+    }
   }
 
   async createMonHoc(monhoc: InsertMonHoc): Promise<MonHoc> {
-    const [insertResult] = await db.insert(schema.monhoc).values(monhoc);
-    const result = await db
-      .select()
-      .from(schema.monhoc)
-      .where(eq(schema.monhoc.id, insertResult.insertId))
-      .limit(1);
-    return result[0];
+    return this.createSingle<MonHoc>(schema.monhoc, monhoc);
   }
 
+  // Lop
   async getLop(maLop: string): Promise<Lop | undefined> {
-    const result = await db
-      .select()
-      .from(schema.lop)
-      .where(eq(schema.lop.maLop, maLop))
-      .limit(1);
-    return result[0];
+    return this.getSingle<Lop>(schema.lop, eq(schema.lop.maLop, maLop));
   }
 
   async createLop(lop: InsertLop): Promise<Lop> {
-    const [insertResult] = await db.insert(schema.lop).values(lop);
-    const result = await db
-      .select()
-      .from(schema.lop)
-      .where(eq(schema.lop.id, insertResult.insertId))
-      .limit(1);
-    return result[0];
+    return this.createSingle<Lop>(schema.lop, lop);
   }
 
+  // DangKyHocPhan
   async getDangKyHocPhan(id: number): Promise<DangKyHocPhan | undefined> {
-    const result = await db
-      .select()
-      .from(schema.dangkyhocphan)
-      .where(eq(schema.dangkyhocphan.id, id))
-      .limit(1);
-    return result[0];
+    return this.getSingle<DangKyHocPhan>(
+      schema.dangkyhocphan,
+      eq(schema.dangkyhocphan.id, id)
+    );
   }
 
   async getDangKyHocPhanBySinhVien(maSv: string): Promise<DangKyHocPhan[]> {
     const sinhVien = await this.getSinhVien(maSv);
     if (!sinhVien) return [];
-    return await db
-      .select()
-      .from(schema.dangkyhocphan)
-      .where(eq(schema.dangkyhocphan.sinhVienId, sinhVien.id));
+    try {
+      return await db
+        .select()
+        .from(schema.dangkyhocphan)
+        .where(eq(schema.dangkyhocphan.sinhVienId, sinhVien.id));
+    } catch (error) {
+      console.error("Error fetching DangKyHocPhan by SinhVien:", error);
+      throw new Error("Failed to fetch course registrations");
+    }
   }
 
   async createDangKyHocPhan(
     dangky: InsertDangKyHocPhan
   ): Promise<DangKyHocPhan> {
-    const [insertResult] = await db.insert(schema.dangkyhocphan).values(dangky);
-    const result = await db
-      .select()
-      .from(schema.dangkyhocphan)
-      .where(eq(schema.dangkyhocphan.id, insertResult.insertId))
-      .limit(1);
-    return result[0];
+    return this.createSingle<DangKyHocPhan>(schema.dangkyhocphan, dangky);
   }
 
+  // LichHoc
   async getLichHoc(id: number): Promise<LichHoc | undefined> {
-    const result = await db
-      .select()
-      .from(schema.lichhoc)
-      .where(eq(schema.lichhoc.id, id))
-      .limit(1);
-    return result[0];
+    return this.getSingle<LichHoc>(schema.lichhoc, eq(schema.lichhoc.id, id));
   }
 
   async getLichHocBySinhVien(maSv: string): Promise<LichHoc[]> {
     const sinhVien = await this.getSinhVien(maSv);
     if (!sinhVien) return [];
     const dangKy = await this.getDangKyHocPhanBySinhVien(maSv);
-    const monHocIds = dangKy.map((dk) => dk.monHocId);
-    return await db
-      .select()
-      .from(schema.lichhoc)
-      .where(
-        monHocIds.length
-          ? eq(schema.lichhoc.monHocId, monHocIds[0])
-          : eq(schema.lichhoc.id, -1)
-      );
+    const monHocIds = dangKy
+      .map((dk) => dk.monHocId)
+      .filter(Boolean) as number[];
+    if (!monHocIds.length) return [];
+    try {
+      return await db
+        .select()
+        .from(schema.lichhoc)
+        .where(eq(schema.lichhoc.monHocId, monHocIds[0]));
+    } catch (error) {
+      console.error("Error fetching LichHoc by SinhVien:", error);
+      throw new Error("Failed to fetch schedule");
+    }
   }
 
   async createLichHoc(lichhoc: InsertLichHoc): Promise<LichHoc> {
-    const [insertResult] = await db.insert(schema.lichhoc).values(lichhoc);
-    const result = await db
-      .select()
-      .from(schema.lichhoc)
-      .where(eq(schema.lichhoc.id, insertResult.insertId))
-      .limit(1);
-    return result[0];
+    return this.createSingle<LichHoc>(schema.lichhoc, lichhoc);
   }
 
+  // ThanhToanHocPhi
   async getThanhToanHocPhi(id: number): Promise<ThanhToanHocPhi | undefined> {
-    const result = await db
-      .select()
-      .from(schema.thanhtoanhocphi)
-      .where(eq(schema.thanhtoanhocphi.id, id))
-      .limit(1);
-    return result[0];
+    return this.getSingle<ThanhToanHocPhi>(
+      schema.thanhtoanhocphi,
+      eq(schema.thanhtoanhocphi.id, id)
+    );
   }
 
   async getThanhToanHocPhiBySinhVien(maSv: string): Promise<ThanhToanHocPhi[]> {
     const sinhVien = await this.getSinhVien(maSv);
     if (!sinhVien) return [];
-    return await db
-      .select()
-      .from(schema.thanhtoanhocphi)
-      .where(eq(schema.thanhtoanhocphi.sinhVienId, sinhVien.id));
+    try {
+      return await db
+        .select()
+        .from(schema.thanhtoanhocphi)
+        .where(eq(schema.thanhtoanhocphi.sinhVienId, sinhVien.id));
+    } catch (error) {
+      console.error("Error fetching ThanhToanHocPhi by SinhVien:", error);
+      throw new Error("Failed to fetch payment records");
+    }
   }
 
   async createThanhToanHocPhi(
     thanhToan: InsertThanhToanHocPhi
   ): Promise<ThanhToanHocPhi> {
-    const [insertResult] = await db
-      .insert(schema.thanhtoanhocphi)
-      .values(thanhToan);
-    const result = await db
-      .select()
-      .from(schema.thanhtoanhocphi)
-      .where(eq(schema.thanhtoanhocphi.id, insertResult.insertId))
-      .limit(1);
-    return result[0];
+    return this.createSingle<ThanhToanHocPhi>(
+      schema.thanhtoanhocphi,
+      thanhToan
+    );
   }
 
+  // NghienCuuKhoaHoc
   async getNghienCuuKhoaHoc(id: number): Promise<NghienCuuKhoaHoc | undefined> {
-    const result = await db
-      .select()
-      .from(schema.nghiencuukhoahoc)
-      .where(eq(schema.nghiencuukhoahoc.id, id))
-      .limit(1);
-    return result[0];
+    return this.getSingle<NghienCuuKhoaHoc>(
+      schema.nghiencuukhoahoc,
+      eq(schema.nghiencuukhoahoc.id, id)
+    );
   }
 
   async getAllNghienCuuKhoaHoc(): Promise<NghienCuuKhoaHoc[]> {
-    return await db.select().from(schema.nghiencuukhoahoc);
+    try {
+      return await db.select().from(schema.nghiencuukhoahoc);
+    } catch (error) {
+      console.error("Error fetching all NghienCuuKhoaHoc:", error);
+      throw new Error("Failed to fetch all research projects");
+    }
   }
 
   async createNghienCuuKhoaHoc(
     project: InsertNghienCuuKhoaHoc
   ): Promise<NghienCuuKhoaHoc> {
-    const [insertResult] = await db
-      .insert(schema.nghiencuukhoahoc)
-      .values(project);
-    const result = await db
-      .select()
-      .from(schema.nghiencuukhoahoc)
-      .where(eq(schema.nghiencuukhoahoc.id, insertResult.insertId))
-      .limit(1);
-    return result[0];
+    return this.createSingle<NghienCuuKhoaHoc>(
+      schema.nghiencuukhoahoc,
+      project
+    );
   }
 
+  // ThanhVienNghienCuu
   async getThanhVienNghienCuu(
     id: number
   ): Promise<ThanhVienNghienCuu | undefined> {
-    const result = await db
-      .select()
-      .from(schema.thanhviennghiencuu)
-      .where(eq(schema.thanhviennghiencuu.id, id))
-      .limit(1);
-    return result[0];
+    return this.getSingle<ThanhVienNghienCuu>(
+      schema.thanhviennghiencuu,
+      eq(schema.thanhviennghiencuu.id, id)
+    );
   }
 
   async getThanhVienNghienCuuByNghienCuu(
     maNghienCuu: number
   ): Promise<ThanhVienNghienCuu[]> {
-    return await db
-      .select()
-      .from(schema.thanhviennghiencuu)
-      .where(eq(schema.thanhviennghiencuu.nghienCuuId, maNghienCuu));
+    try {
+      return await db
+        .select()
+        .from(schema.thanhviennghiencuu)
+        .where(eq(schema.thanhviennghiencuu.nghienCuuId, maNghienCuu));
+    } catch (error) {
+      console.error("Error fetching ThanhVienNghienCuu by NghienCuu:", error);
+      throw new Error("Failed to fetch research members");
+    }
   }
 
   async createThanhVienNghienCuu(
     member: InsertThanhVienNghienCuu
   ): Promise<ThanhVienNghienCuu> {
-    const [insertResult] = await db
-      .insert(schema.thanhviennghiencuu)
-      .values(member);
-    const result = await db
-      .select()
-      .from(schema.thanhviennghiencuu)
-      .where(eq(schema.thanhviennghiencuu.id, insertResult.insertId))
-      .limit(1);
-    return result[0];
+    return this.createSingle<ThanhVienNghienCuu>(
+      schema.thanhviennghiencuu,
+      member
+    );
   }
 
+  // ThongBao
   async getThongBao(id: number): Promise<ThongBao | undefined> {
-    const result = await db
-      .select()
-      .from(schema.thongbao)
-      .where(eq(schema.thongbao.id, id))
-      .limit(1);
-    return result[0];
+    return this.getSingle<ThongBao>(
+      schema.thongbao,
+      eq(schema.thongbao.id, id)
+    );
   }
 
   async getAllThongBao(): Promise<ThongBao[]> {
-    return await db.select().from(schema.thongbao);
+    try {
+      return await db.select().from(schema.thongbao);
+    } catch (error) {
+      console.error("Error fetching all ThongBao:", error);
+      throw new Error("Failed to fetch all announcements");
+    }
   }
 
   async createThongBao(thongbao: InsertThongBao): Promise<ThongBao> {
-    const [insertResult] = await db.insert(schema.thongbao).values(thongbao);
-    const result = await db
-      .select()
-      .from(schema.thongbao)
-      .where(eq(schema.thongbao.id, insertResult.insertId))
-      .limit(1);
-    return result[0];
+    return this.createSingle<ThongBao>(schema.thongbao, thongbao);
   }
 }
 
