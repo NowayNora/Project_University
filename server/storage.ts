@@ -316,21 +316,41 @@ export class MySQLStorage implements IStorage {
   }
 
   async getLichHocBySinhVien(maSv: string): Promise<LichHoc[]> {
-    const sinhVien = await this.getSinhVien(maSv);
-    if (!sinhVien) return [];
-    const dangKy = await this.getDangKyHocPhanBySinhVien(maSv);
-    const monHocIds = dangKy
-      .map((dk) => dk.monHocId)
-      .filter(Boolean) as number[];
-    if (!monHocIds.length) return [];
     try {
-      return await db
-        .select()
+      const sinhVien = await this.getSinhVien(maSv);
+      if (!sinhVien) return [];
+
+      const lichHoc = await db
+        .select({
+          id: schema.lichhoc.id,
+          monHocId: schema.lichhoc.monHocId,
+          phongHoc: schema.lichhoc.phongHoc,
+          thu: schema.lichhoc.thu,
+          tietBatDau: schema.lichhoc.tietBatDau,
+          soTiet: schema.lichhoc.soTiet,
+          buoiHoc: schema.lichhoc.buoiHoc,
+          hocKy: schema.lichhoc.hocKy,
+          namHoc: schema.lichhoc.namHoc,
+          lichHocKhaDungId: schema.lichhoc.lichHocKhaDungId,
+          sinhVienId: schema.lichhoc.sinhVienId,
+          loaiTiet: schema.lichhoc.loaiTiet, // Bổ sung thuộc tính này
+        })
         .from(schema.lichhoc)
-        .where(eq(schema.lichhoc.monHocId, monHocIds[0]));
-    } catch (error) {
-      console.error("Error fetching LichHoc by SinhVien:", error);
-      throw new Error("Failed to fetch schedule");
+        .where(eq(schema.lichhoc.sinhVienId, sinhVien.id));
+
+      return lichHoc.length ? lichHoc : [];
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("Error fetching LichHoc by SinhVien:", error.stack);
+        throw new Error(
+          `Failed to fetch schedule for maSv ${maSv}: ${error.message}`
+        );
+      } else {
+        console.error("Unknown error fetching LichHoc by SinhVien:", error);
+        throw new Error(
+          `Failed to fetch schedule for maSv ${maSv}: Unknown error`
+        );
+      }
     }
   }
 

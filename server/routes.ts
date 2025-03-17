@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { z } from "zod";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray, not, ne, sql } from "drizzle-orm";
 import { db } from "./db";
 import * as schema from "@shared/schema";
 import multer from "multer";
@@ -24,6 +24,7 @@ declare module "express" {
     validatedBody?: any;
     sinhVien?: schema.SinhVien; // Thêm để lưu thông tin sinh viên
     giangVien?: schema.GiangVien; // Thêm để lưu thông tin giảng viên
+    lop?: schema.Lop; // Thêm để lưu thông tin lớp
   }
 }
 
@@ -61,6 +62,26 @@ const attachUserDetails = async (req: any, res: any, next: any) => {
   } catch (error) {
     console.error("Error attaching user details:", error);
     res.status(500).json({ message: "Error fetching user details" });
+  }
+};
+
+// Middleware để lấy thông tin lớp
+const attachClassDetails = async (req: any, res: any, next: any) => {
+  try {
+    const { lopId } = req.params;
+    const lop = await db
+      .select()
+      .from(schema.lop)
+      .where(eq(schema.lop.id, parseInt(lopId)))
+      .then((res) => res[0]);
+    if (!lop) {
+      return res.status(404).json({ message: "Class not found" });
+    }
+    req.lop = lop;
+    next();
+  } catch (error) {
+    console.error("Error fetching class details:", error);
+    res.status(500).json({ message: "Error fetching class details" });
   }
 };
 
@@ -130,6 +151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Route để chọn lịch học
   app.post(
     "/api/sinhvien/lichhoc/chon",
     isAuthenticated,
@@ -137,6 +159,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     validateRequest(
       z.object({
         lichHocKhaDungId: z.number().int().positive("Invalid schedule ID"),
+        thu: z
+          .enum([
+            "Thứ 2",
+            "Thứ 3",
+            "Thứ 4",
+            "Thứ 5",
+            "Thứ 6",
+            "Thứ 7",
+            "Chủ nhật",
+          ])
+          .optional(),
+        tietBatDau: z
+          .number()
+          .int()
+          .min(1)
+          .max(12, "Invalid period")
+          .optional(),
+        soTiet: z
+          .number()
+          .int()
+          .min(1)
+          .max(6, "Invalid number of periods")
+          .optional(),
+        phongHoc: z.string().min(1, "Room is required").optional(),
+        loaiTiet: z.enum(["lyThuyet", "thucHanh"]).optional(),
+        autoSchedule: z.boolean().optional(),
       })
     ),
     async (req: any, res: any) => {
@@ -146,7 +194,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: "Student not found" });
         }
 
-        const { lichHocKhaDungId } = req.validatedBody;
+        const {
+          lichHocKhaDungId,
+          thu,
+          tietBatDau,
+          soTiet,
+          phongHoc,
+          loaiTiet,
+          autoSchedule,
+        } = req.validatedBody;
 
         // Lấy thông tin lịch học khả dụng
         const lichKhaDung = await storage.getLichHocKhaDungById(
@@ -156,49 +212,244 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: "Schedule not found" });
         }
 
-        // Kiểm tra xem còn chỗ không (xử lý giá trị null)
+        // Lấy thông tin môn học để tính số tiết
+        const monHoc = await (async () => {
+          if (!lichKhaDung.monHocId) {
+            return res
+              .status(400)
+              .json({ message: "Invalid monHocId: null or undefined" });
+          }
+          const monHocResult = await storage.getMonHoc(lichKhaDung.monHocId);
+          if (!monHocResult) {
+            return res.status(400).json({ message: "Course not found" });
+          }
+          return monHocResult;
+        })();
+
+        if (!monHoc) {
+          return res
+            .status(500)
+            .json({ message: "Internal server error while fetching course" });
+        }
+
+        const soTinChi = monHoc.soTinChi || 1;
+        const tongTietLyThuyet = 15 * soTinChi;
+        const tongTietThucHanh = 15 * soTinChi;
+        const tongTiet = tongTietLyThuyet + tongTietThucHanh;
+
+        // Kiểm tra xem còn chỗ không
         const soLuongDaDangKy = lichKhaDung.soLuongDaDangKy ?? 0;
-        const soLuongToiDa = lichKhaDung.soLuongToiDa ?? 50; // Giá trị mặc định nếu null
+        const soLuongToiDa = lichKhaDung.soLuongToiDa ?? 50;
         if (soLuongDaDangKy >= soLuongToiDa) {
           return res.status(400).json({ message: "Schedule is full" });
         }
 
-        // Kiểm tra dữ liệu đầu vào
-        if (!sinhVien.id || !lichKhaDung.monHocId) {
-          return res
-            .status(400)
-            .json({ message: "Invalid student or course data" });
+        // Kiểm tra số tiết lý thuyết và thực hành đã đăng ký
+        const existingLich = await (async () => {
+          if (!lichKhaDung.monHocId) {
+            return res
+              .status(400)
+              .json({ message: "Invalid monHocId: null or undefined" });
+          }
+          return await db
+            .select()
+            .from(schema.lichhoc)
+            .where(
+              and(
+                eq(schema.lichhoc.sinhVienId, sinhVien.id),
+                eq(schema.lichhoc.monHocId, lichKhaDung.monHocId)
+              )
+            );
+        })();
+
+        if (!Array.isArray(existingLich)) {
+          return; // Trả về sớm nếu existingLich không phải là mảng (do lỗi đã được xử lý trong IIFE)
         }
 
-        // Kiểm tra xem sinh viên đã đăng ký lịch nào khác cho môn học này chưa
-        const existingLich = await db
+        const tietLyThuyetDaDangKy = existingLich
+          .filter((lh) => lh.loaiTiet === "lyThuyet")
+          .reduce((sum, lh) => sum + (lh.soTiet || 0), 0);
+        const tietThucHanhDaDangKy = existingLich
+          .filter((lh) => lh.loaiTiet === "thucHanh")
+          .reduce((sum, lh) => sum + (lh.soTiet || 0), 0);
+
+        // Nếu tự động sắp lịch
+        if (autoSchedule) {
+          const remainingLyThuyet = tongTietLyThuyet - tietLyThuyetDaDangKy;
+          const remainingThucHanh = tongTietThucHanh - tietThucHanhDaDangKy;
+
+          if (remainingLyThuyet <= 0 && remainingThucHanh <= 0) {
+            return res.status(400).json({
+              message:
+                "You have already completed all required sessions for this course.",
+            });
+          }
+
+          // if (lichKhaDung.monHocId === null) {
+          //   throw new Error("monHocId cannot be null");
+          // }
+
+          const proposedSchedules = await generateSchedule(
+            sinhVien.id,
+            lichKhaDung.monHocId ?? 0,
+            remainingLyThuyet,
+            remainingThucHanh
+          );
+
+          if (proposedSchedules.length === 0) {
+            return res.status(400).json({
+              message:
+                "Unable to generate a schedule. Please try manual scheduling.",
+            });
+          }
+
+          const newLichHocs = [];
+          for (const schedule of proposedSchedules) {
+            const lichHoc = await storage.createLichHoc({
+              sinhVienId: sinhVien.id,
+              lichHocKhaDungId: lichKhaDung.id,
+              monHocId: lichKhaDung.monHocId,
+              phongHoc: schedule.phongHoc,
+              thu: schedule.thu as
+                | "Thứ 2"
+                | "Thứ 3"
+                | "Thứ 4"
+                | "Thứ 5"
+                | "Thứ 6"
+                | "Thứ 7"
+                | "Chủ nhật"
+                | null,
+              tietBatDau: schedule.tietBatDau,
+              soTiet: schedule.soTiet,
+              buoiHoc: lichKhaDung.buoiHoc,
+              hocKy: lichKhaDung.hocKy,
+              namHoc: lichKhaDung.namHoc,
+              loaiTiet: schedule.loaiTiet,
+            });
+            newLichHocs.push(lichHoc);
+          }
+
+          // Cập nhật số lượng đã đăng ký
+          await db
+            .update(schema.lichHocKhaDung)
+            .set({ soLuongDaDangKy: soLuongDaDangKy + 1 })
+            .where(eq(schema.lichHocKhaDung.id, lichHocKhaDungId));
+
+          return res.status(201).json({
+            message: "Schedule automatically generated successfully",
+            lichHocs: newLichHocs,
+          });
+        }
+
+        // Nếu không tự động sắp lịch, sử dụng thông tin thủ công
+        let finalThu = thu || lichKhaDung.thu;
+        let finalTietBatDau = tietBatDau || lichKhaDung.tietBatDau;
+        let finalSoTiet = soTiet || Math.min(tongTiet / 15, 2);
+        let finalPhongHoc = phongHoc || lichKhaDung.phongHoc;
+        let finalLoaiTiet = loaiTiet || "lyThuyet";
+
+        // Kiểm tra giới hạn số tiết lý thuyết và thực hành
+        if (finalLoaiTiet === "lyThuyet") {
+          if (tietLyThuyetDaDangKy + finalSoTiet > tongTietLyThuyet) {
+            return res.status(400).json({
+              message: `Maximum theory sessions (${tongTietLyThuyet} sessions) exceeded. You have already scheduled ${tietLyThuyetDaDangKy} theory sessions.`,
+            });
+          }
+        } else if (finalLoaiTiet === "thucHanh") {
+          if (tietThucHanhDaDangKy + finalSoTiet > tongTietThucHanh) {
+            return res.status(400).json({
+              message: `Maximum practical sessions (${tongTietThucHanh} sessions) exceeded. You have already scheduled ${tietThucHanhDaDangKy} practical sessions.`,
+            });
+          }
+        }
+
+        // Kiểm tra xung đột lịch học của sinh viên
+        const conflictingLich = await db
           .select()
           .from(schema.lichhoc)
           .where(
             and(
               eq(schema.lichhoc.sinhVienId, sinhVien.id),
-              eq(schema.lichhoc.monHocId, lichKhaDung.monHocId)
+              eq(schema.lichhoc.thu, finalThu),
+              sql`${schema.lichhoc.tietBatDau} <= ${
+                finalTietBatDau + finalSoTiet - 1
+              } AND ${schema.lichhoc.tietBatDau} + ${
+                schema.lichhoc.soTiet
+              } - 1 >= ${finalTietBatDau}`,
+              existingLich.length > 0
+                ? ne(schema.lichhoc.id, existingLich[0].id)
+                : sql`TRUE`
             )
           );
 
-        if (existingLich.length > 0) {
-          return res
-            .status(400)
-            .json({ message: "You have already registered for this course" });
+        if (conflictingLich.length > 0) {
+          return res.status(400).json({
+            message:
+              "Schedule conflict: You have another class at this time. Please choose a different day or period.",
+          });
         }
 
-        // Thêm lịch học cho sinh viên
+        // Kiểm tra phòng học có trống không
+        const conflictingPhong = await db
+          .select()
+          .from(schema.lichhoc)
+          .where(
+            and(
+              eq(schema.lichhoc.phongHoc, finalPhongHoc),
+              eq(schema.lichhoc.thu, finalThu),
+              sql`${schema.lichhoc.tietBatDau} <= ${
+                finalTietBatDau + finalSoTiet - 1
+              } AND ${schema.lichhoc.tietBatDau} + ${
+                schema.lichhoc.soTiet
+              } - 1 >= ${finalTietBatDau}`,
+              existingLich.length > 0
+                ? ne(schema.lichhoc.id, existingLich[0].id)
+                : sql`TRUE`
+            )
+          );
+
+        if (conflictingPhong.length > 0) {
+          return res.status(400).json({
+            message:
+              "Room is not available at this time. Please choose a different room or time.",
+          });
+        }
+
+        // Nếu sinh viên đã đăng ký môn học này, xóa lịch học cũ
+        if (existingLich.length > 0) {
+          await db
+            .delete(schema.lichhoc)
+            .where(eq(schema.lichhoc.id, existingLich[0].id));
+
+          // Giảm số lượng đã đăng ký của lịch học khả dụng cũ
+          if (existingLich[0].lichHocKhaDungId) {
+            const oldLichKhaDung = await storage.getLichHocKhaDungById(
+              existingLich[0].lichHocKhaDungId
+            );
+            if (oldLichKhaDung && oldLichKhaDung.soLuongDaDangKy) {
+              await db
+                .update(schema.lichHocKhaDung)
+                .set({ soLuongDaDangKy: oldLichKhaDung.soLuongDaDangKy - 1 })
+                .where(
+                  eq(schema.lichHocKhaDung.id, existingLich[0].lichHocKhaDungId)
+                );
+            }
+          }
+        }
+
+        // Thêm lịch học mới cho sinh viên
         const lichHoc = await storage.createLichHoc({
           sinhVienId: sinhVien.id,
           lichHocKhaDungId: lichKhaDung.id,
           monHocId: lichKhaDung.monHocId,
-          phongHoc: lichKhaDung.phongHoc,
-          thu: lichKhaDung.thu,
-          tietBatDau: lichKhaDung.tietBatDau,
-          soTiet: lichKhaDung.soTiet,
+          phongHoc: finalPhongHoc,
+          thu: finalThu,
+          tietBatDau: finalTietBatDau,
+          soTiet: finalSoTiet,
           buoiHoc: lichKhaDung.buoiHoc,
           hocKy: lichKhaDung.hocKy,
           namHoc: lichKhaDung.namHoc,
+          loaiTiet: finalLoaiTiet,
         });
 
         // Cập nhật số lượng đã đăng ký
@@ -207,16 +458,201 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .set({ soLuongDaDangKy: soLuongDaDangKy + 1 })
           .where(eq(schema.lichHocKhaDung.id, lichHocKhaDungId));
 
-        res
-          .status(201)
-          .json({ message: "Schedule selected successfully", lichHoc });
+        res.status(201).json({
+          message:
+            existingLich.length > 0
+              ? "Schedule updated successfully"
+              : "Schedule selected successfully",
+          lichHoc,
+        });
       } catch (error) {
-        console.error("Error selecting schedule:", error);
-        res.status(500).json({ message: "Error selecting schedule" });
+        console.error("Error selecting/updating schedule:", error);
+        res.status(500).json({ message: "Error selecting/updating schedule" });
       }
     }
   );
 
+  // Hàm generateSchedule
+  async function generateSchedule(
+    sinhVienId: number,
+    monHocId: number,
+    remainingLyThuyet: number,
+    remainingThucHanh: number
+  ): Promise<
+    Array<{
+      thu: string;
+      tietBatDau: number;
+      soTiet: number;
+      phongHoc: string;
+      loaiTiet: string;
+    }>
+  > {
+    const days = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6"];
+    const periodsPerDay = 12;
+    const maxSoTietPerSession = 2;
+
+    const proposedSchedules: Array<{
+      thu: string;
+      tietBatDau: number;
+      soTiet: number;
+      phongHoc: string;
+      loaiTiet: string;
+    }> = [];
+
+    let remainingLyThuyetToSchedule = Math.min(
+      remainingLyThuyet,
+      maxSoTietPerSession
+    );
+    let remainingThucHanhToSchedule = Math.min(
+      remainingThucHanh,
+      maxSoTietPerSession
+    );
+
+    for (const thu of days) {
+      if (remainingLyThuyetToSchedule <= 0 && remainingThucHanhToSchedule <= 0)
+        break;
+
+      for (
+        let tietBatDau = 1;
+        tietBatDau <= periodsPerDay - maxSoTietPerSession + 1;
+        tietBatDau++
+      ) {
+        if (remainingLyThuyetToSchedule > 0) {
+          const conflict = await db
+            .select()
+            .from(schema.lichhoc)
+            .where(
+              and(
+                eq(schema.lichhoc.sinhVienId, sinhVienId),
+                eq(
+                  schema.lichhoc.thu,
+                  thu as
+                    | "Thứ 2"
+                    | "Thứ 3"
+                    | "Thứ 4"
+                    | "Thứ 5"
+                    | "Thứ 6"
+                    | "Thứ 7"
+                    | "Chủ nhật"
+                ),
+                sql`${schema.lichhoc.tietBatDau} <= ${
+                  tietBatDau + maxSoTietPerSession - 1
+                } AND ${schema.lichhoc.tietBatDau} + ${
+                  schema.lichhoc.soTiet
+                } - 1 >= ${tietBatDau}`
+              )
+            );
+
+          if (conflict.length === 0) {
+            const phongHoc = `PH${thu.charAt(thu.length - 1)}01`;
+            const roomConflict = await db
+              .select()
+              .from(schema.lichhoc)
+              .where(
+                and(
+                  eq(schema.lichhoc.phongHoc, phongHoc),
+                  eq(
+                    schema.lichhoc.thu,
+                    thu as
+                      | "Thứ 2"
+                      | "Thứ 3"
+                      | "Thứ 4"
+                      | "Thứ 5"
+                      | "Thứ 6"
+                      | "Thứ 7"
+                      | "Chủ nhật"
+                  ),
+                  sql`${schema.lichhoc.tietBatDau} <= ${
+                    tietBatDau + maxSoTietPerSession - 1
+                  } AND ${schema.lichhoc.tietBatDau} + ${
+                    schema.lichhoc.soTiet
+                  } - 1 >= ${tietBatDau}`
+                )
+              );
+
+            if (roomConflict.length === 0) {
+              proposedSchedules.push({
+                thu,
+                tietBatDau,
+                soTiet: maxSoTietPerSession,
+                phongHoc,
+                loaiTiet: "lyThuyet",
+              });
+              remainingLyThuyetToSchedule -= maxSoTietPerSession;
+            }
+          }
+        }
+
+        if (remainingThucHanhToSchedule > 0) {
+          const conflict = await db
+            .select()
+            .from(schema.lichhoc)
+            .where(
+              and(
+                eq(schema.lichhoc.sinhVienId, sinhVienId),
+                eq(
+                  schema.lichhoc.thu,
+                  thu as
+                    | "Thứ 2"
+                    | "Thứ 3"
+                    | "Thứ 4"
+                    | "Thứ 5"
+                    | "Thứ 6"
+                    | "Thứ 7"
+                    | "Chủ nhật"
+                ),
+                sql`${schema.lichhoc.tietBatDau} <= ${
+                  tietBatDau + maxSoTietPerSession - 1
+                } AND ${schema.lichhoc.tietBatDau} + ${
+                  schema.lichhoc.soTiet
+                } - 1 >= ${tietBatDau}`
+              )
+            );
+
+          if (conflict.length === 0) {
+            const phongHoc = `TH${thu.charAt(thu.length - 1)}01`;
+            const roomConflict = await db
+              .select()
+              .from(schema.lichhoc)
+              .where(
+                and(
+                  eq(schema.lichhoc.phongHoc, phongHoc),
+                  eq(
+                    schema.lichhoc.thu,
+                    thu as
+                      | "Thứ 2"
+                      | "Thứ 3"
+                      | "Thứ 4"
+                      | "Thứ 5"
+                      | "Thứ 6"
+                      | "Thứ 7"
+                      | "Chủ nhật"
+                  ),
+                  sql`${schema.lichhoc.tietBatDau} <= ${
+                    tietBatDau + maxSoTietPerSession - 1
+                  } AND ${schema.lichhoc.tietBatDau} + ${
+                    schema.lichhoc.soTiet
+                  } - 1 >= ${tietBatDau}`
+                )
+              );
+
+            if (roomConflict.length === 0) {
+              proposedSchedules.push({
+                thu,
+                tietBatDau,
+                soTiet: maxSoTietPerSession,
+                phongHoc,
+                loaiTiet: "thucHanh",
+              });
+              remainingThucHanhToSchedule -= maxSoTietPerSession;
+            }
+          }
+        }
+      }
+    }
+
+    return proposedSchedules;
+  }
   // Route lấy kết quả học tập của sinh viên
   app.get(
     "/api/sinhvien/ketquahoctap",
@@ -541,9 +977,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             })
           );
           res.json(lichHocWithDetails);
-        } catch (error) {
-          console.error("Error fetching schedule:", error);
-          res.status(500).json({ message: "Error fetching schedule" });
+        } catch (error: unknown) {
+          if (error instanceof Error) {
+            console.error("Error fetching schedule:", error.stack);
+            res.status(500).json({
+              message: "Error fetching schedule",
+              error: error.message,
+            });
+          } else {
+            console.error("Unknown error fetching schedule:", error);
+            res.status(500).json({
+              message: "Error fetching schedule",
+              error: String(error),
+            });
+          }
         }
       }
     ),
@@ -647,6 +1094,384 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error) {
           console.error("Error fetching teaching schedule:", error);
           res.status(500).json({ message: "Error fetching teaching schedule" });
+        }
+      }
+    ),
+
+    // Route lấy danh sách lớp mà giảng viên phụ trách
+    getManagedClasses: app.get(
+      "/api/giangvien/lophoc",
+      isAuthenticated,
+      hasRole("faculty"),
+      async (req: any, res: any) => {
+        try {
+          const giangVien = await storage.getGiangVienByUserId(req.user.id);
+          if (!giangVien) {
+            return res.status(404).json({ message: "Faculty not found" });
+          }
+
+          // Lấy danh sách môn học mà giảng viên được phân công
+          const phanCong = await db
+            .select()
+            .from(schema.phanconggiangday)
+            .where(eq(schema.phanconggiangday.giangVienId, giangVien.id));
+
+          // Kiểm tra nếu không có phân công nào
+          if (phanCong.length === 0) {
+            return res.json([]); // Trả về mảng rỗng nếu không có lớp nào
+          }
+
+          // Lọc bỏ các monHocId null và ép kiểu thành number[]
+          const monHocIds: number[] = phanCong
+            .map((pc) => pc.monHocId)
+            .filter((id): id is number => id !== null);
+
+          // Nếu không còn monHocId nào sau khi lọc, trả về mảng rỗng
+          if (monHocIds.length === 0) {
+            return res.json([]);
+          }
+
+          // Lấy danh sách lớp liên quan đến các môn học này
+          const lopHoc = await db
+            .selectDistinct({ lop: schema.lop })
+            .from(schema.lop)
+            .innerJoin(
+              schema.sinhvien,
+              eq(schema.lop.id, schema.sinhvien.lopId)
+            )
+            .innerJoin(
+              schema.lichhoc,
+              eq(schema.sinhvien.id, schema.lichhoc.sinhVienId)
+            )
+            .where(inArray(schema.lichhoc.monHocId, monHocIds));
+
+          const lopWithDetails = await Promise.all(
+            lopHoc.map(async (item) => {
+              const lop = item.lop;
+              const monHocList = await db
+                .select({ monHoc: schema.monhoc })
+                .from(schema.monhoc)
+                .innerJoin(
+                  schema.lichhoc,
+                  eq(schema.monhoc.id, schema.lichhoc.monHocId)
+                )
+                .innerJoin(
+                  schema.sinhvien,
+                  eq(schema.lichhoc.sinhVienId, schema.sinhvien.id)
+                )
+                .where(eq(schema.sinhvien.lopId, lop.id));
+              const soLuongSinhVien = await db
+                .select({ count: sql<number>`count(*)` })
+                .from(schema.sinhvien)
+                .where(eq(schema.sinhvien.lopId, lop.id))
+                .then((res) => res[0].count);
+              return {
+                ...lop,
+                monHoc: monHocList.map((m) => m.monHoc),
+                soLuongSinhVien,
+              };
+            })
+          );
+
+          res.json(lopWithDetails);
+        } catch (error) {
+          console.error("Error fetching managed classes:", error);
+          res.status(500).json({ message: "Error fetching managed classes" });
+        }
+      }
+    ),
+
+    // Route xem chi tiết một lớp
+    getClassDetails: app.get(
+      "/api/giangvien/lophoc/:lopId",
+      isAuthenticated,
+      hasRole("faculty"),
+      attachClassDetails,
+      async (req: any, res: any) => {
+        try {
+          const giangVien = await storage.getGiangVienByUserId(req.user.id);
+          if (!giangVien) {
+            return res.status(404).json({ message: "Faculty not found" });
+          }
+
+          // Lấy danh sách phân công giảng dạy của giảng viên
+          const phanCong = await db
+            .select()
+            .from(schema.phanconggiangday)
+            .where(eq(schema.phanconggiangday.giangVienId, giangVien.id));
+
+          // Kiểm tra nếu không có phân công nào
+          if (phanCong.length === 0) {
+            return res
+              .status(403)
+              .json({ message: "You are not assigned to this class" });
+          }
+
+          // Lọc bỏ monHocId null và ép kiểu thành number[]
+          const monHocIds: number[] = phanCong
+            .map((pc) => pc.monHocId)
+            .filter((id): id is number => id !== null);
+
+          // Nếu không có monHocId hợp lệ, trả về lỗi
+          if (monHocIds.length === 0) {
+            return res
+              .status(403)
+              .json({ message: "You are not assigned to this class" });
+          }
+
+          // Kiểm tra xem giảng viên có liên quan đến lớp này qua lịch học không
+          const lichHoc = await db
+            .select()
+            .from(schema.lichhoc)
+            .innerJoin(
+              schema.sinhvien,
+              eq(schema.lichhoc.sinhVienId, schema.sinhvien.id)
+            )
+            .where(
+              and(
+                eq(schema.sinhvien.lopId, req.lop.id),
+                inArray(schema.lichhoc.monHocId, monHocIds)
+              )
+            );
+
+          if (!lichHoc.length) {
+            return res
+              .status(403)
+              .json({ message: "You are not assigned to this class" });
+          }
+
+          const sinhVien = await db
+            .select()
+            .from(schema.sinhvien)
+            .where(eq(schema.sinhvien.lopId, req.lop.id));
+
+          const monHoc = await db
+            .selectDistinct({ monHoc: schema.monhoc })
+            .from(schema.monhoc)
+            .innerJoin(
+              schema.lichhoc,
+              eq(schema.monhoc.id, schema.lichhoc.monHocId)
+            )
+            .innerJoin(
+              schema.sinhvien,
+              eq(schema.lichhoc.sinhVienId, schema.sinhvien.id)
+            )
+            .where(eq(schema.sinhvien.lopId, req.lop.id));
+
+          res.json({
+            lop: req.lop,
+            monHoc: monHoc.map((m) => m.monHoc),
+            sinhVien,
+            soLuongSinhVien: sinhVien.length,
+          });
+        } catch (error) {
+          console.error("Error fetching class details:", error);
+          res.status(500).json({ message: "Error fetching class details" });
+        }
+      }
+    ),
+
+    // Route thêm sinh viên vào lớp
+    addStudentToClass: app.post(
+      "/api/giangvien/lophoc/:lopId/sinhvien",
+      isAuthenticated,
+      hasRole("faculty"),
+      attachClassDetails,
+      validateRequest(
+        z.object({
+          sinhVienId: z.number().int().positive("Invalid student ID"),
+        })
+      ),
+      async (req: any, res: any) => {
+        try {
+          const giangVien = await storage.getGiangVienByUserId(req.user.id);
+          if (!giangVien) {
+            return res.status(404).json({ message: "Faculty not found" });
+          }
+
+          // Lấy danh sách phân công giảng dạy của giảng viên
+          const phanCong = await db
+            .select()
+            .from(schema.phanconggiangday)
+            .where(eq(schema.phanconggiangday.giangVienId, giangVien.id));
+
+          // Kiểm tra nếu không có phân công nào
+          if (phanCong.length === 0) {
+            return res
+              .status(403)
+              .json({ message: "You are not assigned to this class" });
+          }
+
+          // Lọc bỏ monHocId null và ép kiểu thành number[]
+          const monHocIds: number[] = phanCong
+            .map((pc) => pc.monHocId)
+            .filter((id): id is number => id !== null);
+
+          // Nếu không có monHocId hợp lệ, trả về lỗi
+          if (monHocIds.length === 0) {
+            return res
+              .status(403)
+              .json({ message: "You are not assigned to this class" });
+          }
+
+          // Kiểm tra quyền quản lý lớp qua lịch học
+          const lichHoc = await db
+            .select()
+            .from(schema.lichhoc)
+            .innerJoin(
+              schema.sinhvien,
+              eq(schema.lichhoc.sinhVienId, schema.sinhvien.id)
+            )
+            .where(
+              and(
+                eq(schema.sinhvien.lopId, req.lop.id),
+                inArray(schema.lichhoc.monHocId, monHocIds)
+              )
+            );
+
+          if (!lichHoc.length) {
+            return res
+              .status(403)
+              .json({ message: "You are not assigned to this class" });
+          }
+
+          const { sinhVienId } = req.validatedBody;
+          const sinhVien = await db
+            .select()
+            .from(schema.sinhvien)
+            .where(eq(schema.sinhvien.id, sinhVienId))
+            .then((res) => res[0]);
+          if (!sinhVien) {
+            return res.status(404).json({ message: "Student not found" });
+          }
+
+          // Kiểm tra xem sinh viên đã trong lớp chưa
+          if (sinhVien.lopId === req.lop.id) {
+            return res
+              .status(400)
+              .json({ message: "Student is already in this class" });
+          }
+
+          // Cập nhật lớp cho sinh viên
+          await db
+            .update(schema.sinhvien)
+            .set({ lopId: req.lop.id })
+            .where(eq(schema.sinhvien.id, sinhVienId));
+
+          const updatedSinhVien = await db
+            .select()
+            .from(schema.sinhvien)
+            .where(eq(schema.sinhvien.id, sinhVienId))
+            .then((res) => res[0]);
+
+          res.status(200).json({
+            message: "Student added to class successfully",
+            sinhVien: updatedSinhVien,
+          });
+        } catch (error) {
+          console.error("Error adding student to class:", error);
+          res.status(500).json({ message: "Error adding student to class" });
+        }
+      }
+    ),
+
+    // Route xóa sinh viên khỏi lớp
+    removeStudentFromClass: app.delete(
+      "/api/giangvien/lophoc/:lopId/sinhvien/:sinhVienId",
+      isAuthenticated,
+      hasRole("faculty"),
+      attachClassDetails,
+      async (req: any, res: any) => {
+        try {
+          const giangVien = await storage.getGiangVienByUserId(req.user.id);
+          if (!giangVien) {
+            return res.status(404).json({ message: "Faculty not found" });
+          }
+
+          // Lấy danh sách phân công giảng dạy của giảng viên
+          const phanCong = await db
+            .select()
+            .from(schema.phanconggiangday)
+            .where(eq(schema.phanconggiangday.giangVienId, giangVien.id));
+
+          // Kiểm tra nếu không có phân công nào
+          if (phanCong.length === 0) {
+            return res
+              .status(403)
+              .json({ message: "You are not assigned to this class" });
+          }
+
+          // Lọc bỏ monHocId null và ép kiểu thành number[]
+          const monHocIds: number[] = phanCong
+            .map((pc) => pc.monHocId)
+            .filter((id): id is number => id !== null);
+
+          // Nếu không có monHocId hợp lệ, trả về lỗi
+          if (monHocIds.length === 0) {
+            return res
+              .status(403)
+              .json({ message: "You are not assigned to this class" });
+          }
+
+          // Kiểm tra quyền quản lý lớp qua lịch học
+          const lichHoc = await db
+            .select()
+            .from(schema.lichhoc)
+            .innerJoin(
+              schema.sinhvien,
+              eq(schema.lichhoc.sinhVienId, schema.sinhvien.id)
+            )
+            .where(
+              and(
+                eq(schema.sinhvien.lopId, req.lop.id),
+                inArray(schema.lichhoc.monHocId, monHocIds)
+              )
+            );
+
+          if (!lichHoc.length) {
+            return res
+              .status(403)
+              .json({ message: "You are not assigned to this class" });
+          }
+
+          const { sinhVienId } = req.params;
+          const sinhVien = await db
+            .select()
+            .from(schema.sinhvien)
+            .where(eq(schema.sinhvien.id, parseInt(sinhVienId)))
+            .then((res) => res[0]);
+          if (!sinhVien) {
+            return res.status(404).json({ message: "Student not found" });
+          }
+
+          // Kiểm tra xem sinh viên có trong lớp không
+          if (sinhVien.lopId !== req.lop.id) {
+            return res
+              .status(400)
+              .json({ message: "Student is not in this class" });
+          }
+
+          // Xóa sinh viên khỏi lớp bằng cách đặt lopId về null
+          await db
+            .update(schema.sinhvien)
+            .set({ lopId: null })
+            .where(eq(schema.sinhvien.id, parseInt(sinhVienId)));
+
+          const updatedSinhVien = await db
+            .select()
+            .from(schema.sinhvien)
+            .where(eq(schema.sinhvien.id, parseInt(sinhVienId)))
+            .then((res) => res[0]);
+
+          res.status(200).json({
+            message: "Student removed from class successfully",
+            sinhVien: updatedSinhVien,
+          });
+        } catch (error) {
+          console.error("Error removing student from class:", error);
+          res
+            .status(500)
+            .json({ message: "Error removing student from class" });
         }
       }
     ),

@@ -156,6 +156,7 @@ export const lichhoc = mysqlTable("lichhoc", {
   hocKy: varchar("hoc_ky", { length: 20 }),
   namHoc: varchar("nam_hoc", { length: 20 }),
   buoiHoc: mysqlEnum("buoi_hoc", ["Sáng", "Chiều", "Tối"]),
+  loaiTiet: varchar("loai_tiet", { length: 10 }).notNull().default("lyThuyet"), // Thêm loaiTiet
 });
 
 export const lichHocKhaDung = mysqlTable("lich_hoc_kha_dung", {

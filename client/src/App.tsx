@@ -7,6 +7,9 @@ import AuthPage from "@/pages/auth-page";
 import { AuthProvider } from "@/hooks/use-auth";
 import StudentDashboard from "@/pages/student/dashboard";
 import FacultyDashboard from "@/pages/faculty/dashboard";
+import TeachingPage from "@/pages/faculty/schedule";
+import GradeManagementPage from "@/pages/faculty/grademanagement";
+// import CreateResearchProjectPage from "@/pages/faculty/schedule";
 import StudentProfile from "@/pages/student/profile"; // Thêm import
 import SchedulePage from "@/pages/student/schedule"; // Thêm import
 import EnrollmentPage from "@/pages/student/enrollment"; // Thêm import
@@ -60,6 +63,21 @@ function Router() {
       <ProtectedRoute
         path="/faculty/dashboard"
         component={FacultyDashboard}
+        vaiTro="faculty"
+      />
+      <ProtectedRoute
+        path="/giangvien/lophoc" //lịch dạy
+        component={TeachingPage}
+        vaiTro="faculty"
+      />
+      {/* <ProtectedRoute
+        path="/giangvien/tailieu"
+        component={}
+        vaiTro="faculty"
+      /> */}
+      <ProtectedRoute
+        path="/giangvien/quanlydiem"
+        component={GradeManagementPage}
         vaiTro="faculty"
       />
 
