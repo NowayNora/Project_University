@@ -49,6 +49,7 @@ export const dethi = mysqlTable("dethi", {
   id: serial("id").primaryKey(),
   monHocId: int("mon_hoc_id").references(() => monhoc.id),
   loaiDe: mysqlEnum("loai_de", ["Giữa kỳ", "Cuối kỳ", "Bảo vệ"]),
+  giangVien: varchar("giang_vien", { length: 50 }),
   namHoc: varchar("nam_hoc", { length: 20 }),
   hocKy: varchar("hoc_ky", { length: 20 }),
   thoiGianLam: int("thoi_gian_lam"),
@@ -135,6 +136,10 @@ export const lichgiangday = mysqlTable("lichgiangday", {
 // Bảng lichhoc
 export const lichhoc = mysqlTable("lichhoc", {
   id: serial("id").primaryKey(),
+  sinhVienId: int("sinh_vien_id").references(() => sinhvien.id), // Thêm để biết sinh viên nào chọn
+  lichHocKhaDungId: int("lich_hoc_kha_dung_id").references(
+    () => lichHocKhaDung.id
+  ),
   monHocId: int("mon_hoc_id").references(() => monhoc.id),
   phongHoc: varchar("phong_hoc", { length: 20 }),
   thu: mysqlEnum("thu", [
@@ -150,6 +155,29 @@ export const lichhoc = mysqlTable("lichhoc", {
   soTiet: int("so_tiet"),
   hocKy: varchar("hoc_ky", { length: 20 }),
   namHoc: varchar("nam_hoc", { length: 20 }),
+  buoiHoc: mysqlEnum("buoi_hoc", ["Sáng", "Chiều", "Tối"]),
+});
+
+export const lichHocKhaDung = mysqlTable("lich_hoc_kha_dung", {
+  id: serial("id").primaryKey(),
+  monHocId: int("mon_hoc_id").references(() => monhoc.id),
+  thu: mysqlEnum("thu", [
+    "Thứ 2",
+    "Thứ 3",
+    "Thứ 4",
+    "Thứ 5",
+    "Thứ 6",
+    "Thứ 7",
+    "Chủ nhật",
+  ]),
+  buoiHoc: mysqlEnum("buoi_hoc", ["Sáng", "Chiều", "Tối"]),
+  phongHoc: varchar("phong_hoc", { length: 20 }),
+  tietBatDau: int("tiet_bat_dau"),
+  soTiet: int("so_tiet"),
+  hocKy: varchar("hoc_ky", { length: 20 }),
+  namHoc: varchar("nam_hoc", { length: 20 }),
+  soLuongToiDa: int("so_luong_toi_da").default(50), // Giới hạn số sinh viên
+  soLuongDaDangKy: int("so_luong_da_dang_ky").default(0), // Số lượng đã đăng ký
 });
 
 // Bảng lichsudangnhap
@@ -417,6 +445,7 @@ export const insertKetQuaHocTapSchema = createInsertSchema(ketquahoctap);
 export const insertKhoaLuanDoAnSchema = createInsertSchema(khoaluandoan);
 export const insertLichGiangDaySchema = createInsertSchema(lichgiangday);
 export const insertLichHocSchema = createInsertSchema(lichhoc);
+export const insertLichHocKhaDungSchema = createInsertSchema(lichHocKhaDung);
 export const insertLichSuDangNhapSchema = createInsertSchema(lichsudangnhap);
 export const insertLopSchema = createInsertSchema(lop);
 export const insertMonHocSchema = createInsertSchema(monhoc);
@@ -459,6 +488,8 @@ export type LichGiangDay = typeof lichgiangday.$inferSelect;
 export type InsertLichGiangDay = z.infer<typeof insertLichGiangDaySchema>;
 export type LichHoc = typeof lichhoc.$inferSelect;
 export type InsertLichHoc = z.infer<typeof insertLichHocSchema>;
+export type LichHocKhaDung = typeof lichHocKhaDung.$inferSelect;
+export type InsertLichHocKhaDung = z.infer<typeof insertLichHocKhaDungSchema>;
 export type LichSuDangNhap = typeof lichsudangnhap.$inferSelect;
 export type InsertLichSuDangNhap = z.infer<typeof insertLichSuDangNhapSchema>;
 export type Lop = typeof lop.$inferSelect;

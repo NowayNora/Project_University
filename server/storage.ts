@@ -334,8 +334,41 @@ export class MySQLStorage implements IStorage {
     }
   }
 
-  async createLichHoc(lichhoc: InsertLichHoc): Promise<LichHoc> {
-    return this.createSingle<LichHoc>(schema.lichhoc, lichhoc);
+  // async createLichHoc(lichhoc: InsertLichHoc): Promise<LichHoc> {
+  //   return this.createSingle<LichHoc>(schema.lichhoc, lichhoc);
+  // }
+
+  // Trong storage.ts
+  async getLichHocKhaDung(monHocId: number): Promise<schema.LichHocKhaDung[]> {
+    try {
+      return await db
+        .select()
+        .from(schema.lichHocKhaDung)
+        .where(eq(schema.lichHocKhaDung.monHocId, monHocId));
+    } catch (error) {
+      console.error("Error fetching available schedules:", error);
+      throw new Error("Failed to fetch available schedules");
+    }
+  }
+
+  async getLichHocKhaDungById(
+    id: number
+  ): Promise<schema.LichHocKhaDung | undefined> {
+    try {
+      const result = await db
+        .select()
+        .from(schema.lichHocKhaDung)
+        .where(eq(schema.lichHocKhaDung.id, id))
+        .limit(1);
+      return result[0];
+    } catch (error) {
+      console.error("Error fetching schedule by ID:", error);
+      throw new Error("Failed to fetch schedule by ID");
+    }
+  }
+
+  async createLichHoc(lichhoc: schema.InsertLichHoc): Promise<schema.LichHoc> {
+    return this.createSingle<schema.LichHoc>(schema.lichhoc, lichhoc);
   }
 
   // ThanhToanHocPhi

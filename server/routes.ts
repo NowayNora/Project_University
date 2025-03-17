@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { z } from "zod";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "./db";
 import * as schema from "@shared/schema";
 import multer from "multer";
@@ -109,6 +109,113 @@ const upload = multer({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
+
+  app.get(
+    "/api/sinhvien/lichhoc/kha-dung",
+    isAuthenticated,
+    hasRole("student"),
+    async (req: any, res: any) => {
+      try {
+        const { monHocId } = req.query;
+        if (!monHocId) {
+          return res.status(400).json({ message: "Course ID is required" });
+        }
+
+        const lichKhaDung = await storage.getLichHocKhaDung(parseInt(monHocId));
+        res.json(lichKhaDung);
+      } catch (error) {
+        console.error("Error fetching available schedules:", error);
+        res.status(500).json({ message: "Error fetching available schedules" });
+      }
+    }
+  );
+
+  app.post(
+    "/api/sinhvien/lichhoc/chon",
+    isAuthenticated,
+    hasRole("student"),
+    validateRequest(
+      z.object({
+        lichHocKhaDungId: z.number().int().positive("Invalid schedule ID"),
+      })
+    ),
+    async (req: any, res: any) => {
+      try {
+        const sinhVien = await storage.getSinhVienByUserId(req.user.id);
+        if (!sinhVien) {
+          return res.status(404).json({ message: "Student not found" });
+        }
+
+        const { lichHocKhaDungId } = req.validatedBody;
+
+        // Lấy thông tin lịch học khả dụng
+        const lichKhaDung = await storage.getLichHocKhaDungById(
+          lichHocKhaDungId
+        );
+        if (!lichKhaDung) {
+          return res.status(404).json({ message: "Schedule not found" });
+        }
+
+        // Kiểm tra xem còn chỗ không (xử lý giá trị null)
+        const soLuongDaDangKy = lichKhaDung.soLuongDaDangKy ?? 0;
+        const soLuongToiDa = lichKhaDung.soLuongToiDa ?? 50; // Giá trị mặc định nếu null
+        if (soLuongDaDangKy >= soLuongToiDa) {
+          return res.status(400).json({ message: "Schedule is full" });
+        }
+
+        // Kiểm tra dữ liệu đầu vào
+        if (!sinhVien.id || !lichKhaDung.monHocId) {
+          return res
+            .status(400)
+            .json({ message: "Invalid student or course data" });
+        }
+
+        // Kiểm tra xem sinh viên đã đăng ký lịch nào khác cho môn học này chưa
+        const existingLich = await db
+          .select()
+          .from(schema.lichhoc)
+          .where(
+            and(
+              eq(schema.lichhoc.sinhVienId, sinhVien.id),
+              eq(schema.lichhoc.monHocId, lichKhaDung.monHocId)
+            )
+          );
+
+        if (existingLich.length > 0) {
+          return res
+            .status(400)
+            .json({ message: "You have already registered for this course" });
+        }
+
+        // Thêm lịch học cho sinh viên
+        const lichHoc = await storage.createLichHoc({
+          sinhVienId: sinhVien.id,
+          lichHocKhaDungId: lichKhaDung.id,
+          monHocId: lichKhaDung.monHocId,
+          phongHoc: lichKhaDung.phongHoc,
+          thu: lichKhaDung.thu,
+          tietBatDau: lichKhaDung.tietBatDau,
+          soTiet: lichKhaDung.soTiet,
+          buoiHoc: lichKhaDung.buoiHoc,
+          hocKy: lichKhaDung.hocKy,
+          namHoc: lichKhaDung.namHoc,
+        });
+
+        // Cập nhật số lượng đã đăng ký
+        await db
+          .update(schema.lichHocKhaDung)
+          .set({ soLuongDaDangKy: soLuongDaDangKy + 1 })
+          .where(eq(schema.lichHocKhaDung.id, lichHocKhaDungId));
+
+        res
+          .status(201)
+          .json({ message: "Schedule selected successfully", lichHoc });
+      } catch (error) {
+        console.error("Error selecting schedule:", error);
+        res.status(500).json({ message: "Error selecting schedule" });
+      }
+    }
+  );
 
   // Route lấy kết quả học tập của sinh viên
   app.get(
@@ -660,6 +767,346 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error fetching announcements" });
     }
   });
+
+  // 1. Cấu hình tài khoản (cauhinh_taikhoan) - Admin hoặc người dùng
+  app.get(
+    "/api/taikhoan/cauhinh",
+    isAuthenticated,
+    async (req: any, res: any) => {
+      try {
+        const cauhinh = await db
+          .select()
+          .from(schema.cauhinhTaikhoan)
+          .where(eq(schema.cauhinhTaikhoan.taikhoanId, req.user.id));
+        res.json(cauhinh[0] || {});
+      } catch (error) {
+        console.error("Error fetching account config:", error);
+        res
+          .status(500)
+          .json({ message: "Error fetching account configuration" });
+      }
+    }
+  );
+
+  app.put(
+    "/api/taikhoan/cauhinh",
+    isAuthenticated,
+    validateRequest(
+      z.object({
+        xacThucHaiYeuTo: z.boolean().optional(),
+        soDienThoaiXacThuc: z.string().max(20).optional(),
+        emailXacThuc: z.string().email().max(100).optional(),
+        khoaTaiKhoanSauDangNhapThatBai: z.number().int().min(1).optional(),
+      })
+    ),
+    async (req: any, res: any) => {
+      try {
+        const existingConfig = await db
+          .select()
+          .from(schema.cauhinhTaikhoan)
+          .where(eq(schema.cauhinhTaikhoan.taikhoanId, req.user.id));
+        const data = { taikhoanId: req.user.id, ...req.validatedBody };
+        let result;
+        if (existingConfig.length) {
+          result = await db
+            .update(schema.cauhinhTaikhoan)
+            .set(data)
+            .where(eq(schema.cauhinhTaikhoan.taikhoanId, req.user.id));
+        } else {
+          result = await db.insert(schema.cauhinhTaikhoan).values(data);
+        }
+        res.json({ message: "Account config updated", cauhinh: result[0] });
+      } catch (error) {
+        console.error("Error updating account config:", error);
+        res
+          .status(500)
+          .json({ message: "Error updating account configuration" });
+      }
+    }
+  );
+
+  // 2. Đề thi (dethi) - Giảng viên
+  app.post(
+    "/api/giangvien/dethi",
+    isAuthenticated,
+    hasRole("faculty"),
+    validateRequest(
+      z.object({
+        monHocId: z.number().int().positive(),
+        loaiDe: z.enum(["Giữa kỳ", "Cuối kỳ", "Bảo vệ"]),
+        namHoc: z.string().max(20),
+        hocKy: z.string().max(20),
+        thoiGianLam: z.number().int().positive(),
+        moTa: z.string().optional(),
+      })
+    ),
+    async (req: any, res: any) => {
+      try {
+        const giangVien = req.giangVien;
+        const data = { giangVien: giangVien.hoTen, ...req.validatedBody };
+        const dethi = await db.insert(schema.dethi).values(data);
+        res.status(201).json({ message: "Exam created", dethi: dethi[0] });
+      } catch (error) {
+        console.error("Error creating exam:", error);
+        res.status(500).json({ message: "Error creating exam" });
+      }
+    }
+  );
+
+  app.get(
+    "/api/giangvien/dethi",
+    isAuthenticated,
+    hasRole("faculty"),
+    async (req: any, res: any) => {
+      try {
+        const dethi = await db
+          .select()
+          .from(schema.dethi)
+          .where(eq(schema.dethi.giangVien, req.giangVien.hoTen));
+        res.json(dethi);
+      } catch (error) {
+        console.error("Error fetching exams:", error);
+        res.status(500).json({ message: "Error fetching exams" });
+      }
+    }
+  );
+
+  // 3. Điểm danh (diemdanh) - Giảng viên
+  app.post(
+    "/api/giangvien/diemdanh",
+    isAuthenticated,
+    hasRole("faculty"),
+    validateRequest(
+      z.object({
+        sinhVienId: z.number().int().positive(),
+        monHocId: z.number().int().positive(),
+        ngayDiemDanh: z.string().transform((val) => new Date(val)),
+        trangThai: z.enum(["Có mặt", "Vắng mặt", "Đi muộn"]),
+        ghiChu: z.string().optional(),
+      })
+    ),
+    async (req: any, res: any) => {
+      try {
+        const diemdanh = await db
+          .insert(schema.diemdanh)
+          .values(req.validatedBody);
+        res
+          .status(201)
+          .json({ message: "Attendance recorded", diemdanh: diemdanh[0] });
+      } catch (error) {
+        console.error("Error recording attendance:", error);
+        res.status(500).json({ message: "Error recording attendance" });
+      }
+    }
+  );
+
+  app.get(
+    "/api/sinhvien/diemdanh",
+    isAuthenticated,
+    hasRole("student"),
+    async (req: any, res: any) => {
+      try {
+        const diemdanh = await db
+          .select()
+          .from(schema.diemdanh)
+          .where(eq(schema.diemdanh.sinhVienId, req.sinhVien.id));
+        res.json(diemdanh);
+      } catch (error) {
+        console.error("Error fetching attendance:", error);
+        res.status(500).json({ message: "Error fetching attendance" });
+      }
+    }
+  );
+
+  // 4. Khóa luận/đồ án (khoaluandoan) - Sinh viên & Giảng viên
+  app.post(
+    "/api/sinhvien/khoaluandoan",
+    isAuthenticated,
+    hasRole("student"),
+    validateRequest(
+      z.object({
+        giangVienHuongDanId: z.number().int().positive(),
+        tenDeTai: z.string().max(200),
+        moTa: z.string().optional(),
+        thoiGianBatDau: z.string().transform((val) => new Date(val)),
+        thoiGianKetThuc: z.string().transform((val) => new Date(val)),
+      })
+    ),
+    async (req: any, res: any) => {
+      try {
+        const data = {
+          sinhVienId: req.sinhVien.id,
+          trangThai: "Đang thực hiện",
+          ...req.validatedBody,
+        };
+        const khoaluan = await db.insert(schema.khoaluandoan).values(data);
+        res
+          .status(201)
+          .json({ message: "Thesis registered", khoaluan: khoaluan[0] });
+      } catch (error) {
+        console.error("Error registering thesis:", error);
+        res.status(500).json({ message: "Error registering thesis" });
+      }
+    }
+  );
+
+  app.get(
+    "/api/giangvien/khoaluandoan",
+    isAuthenticated,
+    hasRole("faculty"),
+    async (req: any, res: any) => {
+      try {
+        const khoaluan = await db
+          .select()
+          .from(schema.khoaluandoan)
+          .where(eq(schema.khoaluandoan.giangVienHuongDanId, req.giangVien.id));
+        res.json(khoaluan);
+      } catch (error) {
+        console.error("Error fetching theses:", error);
+        res.status(500).json({ message: "Error fetching theses" });
+      }
+    }
+  );
+
+  // 5. Quản lý điểm (quanlydiem) - Giảng viên
+  app.post(
+    "/api/giangvien/quanlydiem",
+    isAuthenticated,
+    hasRole("faculty"),
+    validateRequest(
+      z.object({
+        sinhVienId: z.number().int().positive(),
+        monHocId: z.number().int().positive(),
+        diemChuyenCan: z.number().min(0).max(10).optional(),
+        diemGiuaKy: z.number().min(0).max(10).optional(),
+        diemCuoiKy: z.number().min(0).max(10).optional(),
+        diemTongKet: z.number().min(0).max(10).optional(),
+        hocKy: z.string().max(20),
+        namHoc: z.string().max(20),
+      })
+    ),
+    async (req: any, res: any) => {
+      try {
+        const diem = await db
+          .insert(schema.quanlydiem)
+          .values(req.validatedBody);
+        res.status(201).json({ message: "Grades recorded", diem: diem[0] });
+      } catch (error) {
+        console.error("Error recording grades:", error);
+        res.status(500).json({ message: "Error recording grades" });
+      }
+    }
+  );
+
+  app.get(
+    "/api/sinhvien/quanlydiem",
+    isAuthenticated,
+    hasRole("student"),
+    async (req: any, res: any) => {
+      try {
+        const diem = await db
+          .select()
+          .from(schema.quanlydiem)
+          .where(eq(schema.quanlydiem.sinhVienId, req.sinhVien.id));
+        res.json(diem);
+      } catch (error) {
+        console.error("Error fetching grades:", error);
+        res.status(500).json({ message: "Error fetching grades" });
+      }
+    }
+  );
+
+  // 6. Tài liệu giảng dạy (tailieugiangday) - Giảng viên
+  app.post(
+    "/api/giangvien/tailieu",
+    isAuthenticated,
+    hasRole("faculty"),
+    upload.single("file"),
+    validateRequest(
+      z.object({
+        monHocId: z.number().int().positive(),
+        tenTaiLieu: z.string().max(200),
+        moTa: z.string().optional(),
+        loaiTaiLieu: z.string().max(50).optional(),
+      })
+    ),
+    async (req: any, res: any) => {
+      try {
+        if (!req.file)
+          return res.status(400).json({ message: "No file uploaded" });
+        const data = {
+          monHocId: req.validatedBody.monHocId,
+          tenTaiLieu: req.validatedBody.tenTaiLieu,
+          moTa: req.validatedBody.moTa,
+          duongDan: path.basename(req.file.path),
+          loaiTaiLieu: req.validatedBody.loaiTaiLieu,
+          ngayTao: new Date(),
+        };
+        const tailieu = await db.insert(schema.tailieugiangday).values(data);
+        res
+          .status(201)
+          .json({ message: "Document uploaded", tailieu: tailieu[0] });
+      } catch (error) {
+        console.error("Error uploading document:", error);
+        res.status(500).json({ message: "Error uploading document" });
+      }
+    }
+  );
+
+  app.get("/api/tailieu", isAuthenticated, async (req: any, res: any) => {
+    try {
+      const tailieu = await db.select().from(schema.tailieugiangday);
+      res.json(tailieu);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      res.status(500).json({ message: "Error fetching documents" });
+    }
+  });
+
+  // 7. Lịch sử đăng nhập (lichsudangnhap) - Người dùng
+  app.get(
+    "/api/lichsudangnhap",
+    isAuthenticated,
+    async (req: any, res: any) => {
+      try {
+        const lichsu = await db
+          .select()
+          .from(schema.lichsudangnhap)
+          .where(eq(schema.lichsudangnhap.taikhoanId, req.user.id));
+        res.json(lichsu);
+      } catch (error) {
+        console.error("Error fetching login history:", error);
+        res.status(500).json({ message: "Error fetching login history" });
+      }
+    }
+  );
+
+  // 8. Phân công giảng dạy (phanconggiangday) - Admin
+  app.post(
+    "/api/admin/phanconggiangday",
+    isAuthenticated,
+    hasRole("admin"),
+    validateRequest(
+      z.object({
+        giangVienId: z.number().int().positive(),
+        monHocId: z.number().int().positive(),
+        hocKy: z.string().max(20),
+        namHoc: z.string().max(20),
+      })
+    ),
+    async (req: any, res: any) => {
+      try {
+        const data = { ngayPhanCong: new Date(), ...req.validatedBody };
+        const phancong = await db.insert(schema.phanconggiangday).values(data);
+        res
+          .status(201)
+          .json({ message: "Assignment created", phancong: phancong[0] });
+      } catch (error) {
+        console.error("Error creating assignment:", error);
+        res.status(500).json({ message: "Error creating assignment" });
+      }
+    }
+  );
 
   const httpServer = createServer(app);
   return httpServer;

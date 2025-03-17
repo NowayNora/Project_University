@@ -8,6 +8,11 @@ import { AuthProvider } from "@/hooks/use-auth";
 import StudentDashboard from "@/pages/student/dashboard";
 import FacultyDashboard from "@/pages/faculty/dashboard";
 import StudentProfile from "@/pages/student/profile"; // Thêm import
+import SchedulePage from "@/pages/student/schedule"; // Thêm import
+import EnrollmentPage from "@/pages/student/enrollment"; // Thêm import
+import TuitionFeePage from "@/pages/student/tuitionfeepage"; // Thêm import
+import TrainingProgramPage from "@/pages/student/trainingprogram"; // Thêm import
+import PaymentPage from "@/pages/student/payment"; // Thêm import
 import { ProtectedRoute } from "@/lib/protected-route";
 
 function Router() {
@@ -28,10 +33,36 @@ function Router() {
         vaiTro="student"
       />
       <ProtectedRoute
+        path="/student/schedule" // Thêm route mới
+        component={SchedulePage}
+        vaiTro="student"
+      />
+      <ProtectedRoute
+        path="/student/enrollment" // Thêm route mới
+        component={EnrollmentPage}
+        vaiTro="student"
+      />
+      <ProtectedRoute
+        path="/student/tuition" // Thêm route mới
+        component={TuitionFeePage}
+        vaiTro="student"
+      />
+      <ProtectedRoute
+        path="/student/curriculum" // Thêm route mới
+        component={TrainingProgramPage}
+        vaiTro="student"
+      />
+      <ProtectedRoute
+        path="/student/payment" // Thêm route mới
+        component={PaymentPage}
+        vaiTro="student"
+      />
+      <ProtectedRoute
         path="/faculty/dashboard"
         component={FacultyDashboard}
         vaiTro="faculty"
       />
+
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
