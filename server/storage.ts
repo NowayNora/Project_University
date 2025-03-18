@@ -101,6 +101,49 @@ export interface IStorage {
 
   getCurrentHocKyNamHoc(): Promise<HocKyNamHoc | undefined>;
 
+  // Tuần học
+  getTuanHoc(
+    id: number
+  ): Promise<typeof schema.tuanHoc.$inferSelect | undefined>;
+  getTuanHocByHocKy(
+    hockyNamHocId: number
+  ): Promise<(typeof schema.tuanHoc.$inferSelect)[]>;
+  createTuanHoc(
+    tuanHoc: typeof schema.tuanHoc.$inferInsert
+  ): Promise<typeof schema.tuanHoc.$inferSelect>;
+
+  // Chi tiết môn học
+  getChiTietMonHoc(
+    monHocId: number
+  ): Promise<typeof schema.chiTietMonHoc.$inferSelect | undefined>;
+  createChiTietMonHoc(
+    chiTiet: typeof schema.chiTietMonHoc.$inferInsert
+  ): Promise<typeof schema.chiTietMonHoc.$inferSelect>;
+
+  // Kế hoạch giảng dạy
+  getKeHoachGiangDay(
+    lichHocId: number
+  ): Promise<(typeof schema.keHoachGiangDay.$inferSelect)[]>;
+  createKeHoachGiangDay(
+    keHoach: typeof schema.keHoachGiangDay.$inferInsert
+  ): Promise<typeof schema.keHoachGiangDay.$inferSelect>;
+
+  // Nhóm thực hành
+  getNhomThucHanh(
+    lichHocId: number
+  ): Promise<(typeof schema.nhomThucHanh.$inferSelect)[]>;
+  createNhomThucHanh(
+    nhom: typeof schema.nhomThucHanh.$inferInsert
+  ): Promise<typeof schema.nhomThucHanh.$inferSelect>;
+
+  // Phân nhóm sinh viên
+  getPhanNhomSinhVien(
+    sinhVienId: number
+  ): Promise<(typeof schema.phanNhomSinhVien.$inferSelect)[]>;
+  createPhanNhomSinhVien(
+    phanNhom: typeof schema.phanNhomSinhVien.$inferInsert
+  ): Promise<typeof schema.phanNhomSinhVien.$inferSelect>;
+
   sessionStore: session.Store;
 }
 
@@ -501,6 +544,147 @@ export class MySQLStorage implements IStorage {
   async createThongBao(thongbao: InsertThongBao): Promise<ThongBao> {
     return this.createSingle<ThongBao>(schema.thongbao, thongbao);
   }
+
+  // Tuần học
+  async getTuanHoc(
+    id: number
+  ): Promise<typeof schema.tuanHoc.$inferSelect | undefined> {
+    return this.getSingle<typeof schema.tuanHoc.$inferSelect>(
+      schema.tuanHoc,
+      eq(schema.tuanHoc.id, id)
+    );
+  }
+
+  async getTuanHocByHocKy(
+    hockyNamHocId: number
+  ): Promise<(typeof schema.tuanHoc.$inferSelect)[]> {
+    try {
+      return await db
+        .select()
+        .from(schema.tuanHoc)
+        .where(eq(schema.tuanHoc.hockyNamHocId, hockyNamHocId))
+        .orderBy(schema.tuanHoc.tuanThu);
+    } catch (error) {
+      console.error("Error fetching tuần học by học kỳ:", error);
+      throw new Error("Failed to fetch weeks for semester");
+    }
+  }
+
+  async createTuanHoc(
+    tuanHoc: typeof schema.tuanHoc.$inferInsert
+  ): Promise<typeof schema.tuanHoc.$inferSelect> {
+    return this.createSingle<typeof schema.tuanHoc.$inferSelect>(
+      schema.tuanHoc,
+      tuanHoc
+    );
+  }
+
+  // Chi tiết môn học
+  async getChiTietMonHoc(
+    monHocId: number
+  ): Promise<typeof schema.chiTietMonHoc.$inferSelect | undefined> {
+    return this.getSingle<typeof schema.chiTietMonHoc.$inferSelect>(
+      schema.chiTietMonHoc,
+      eq(schema.chiTietMonHoc.monHocId, monHocId)
+    );
+  }
+
+  async createChiTietMonHoc(
+    chiTiet: typeof schema.chiTietMonHoc.$inferInsert
+  ): Promise<typeof schema.chiTietMonHoc.$inferSelect> {
+    return this.createSingle<typeof schema.chiTietMonHoc.$inferSelect>(
+      schema.chiTietMonHoc,
+      chiTiet
+    );
+  }
+
+  // Kế hoạch giảng dạy
+  async getKeHoachGiangDay(
+    lichHocId: number
+  ): Promise<(typeof schema.keHoachGiangDay.$inferSelect)[]> {
+    try {
+      return await db
+        .select()
+        .from(schema.keHoachGiangDay)
+        .where(eq(schema.keHoachGiangDay.lichHocId, lichHocId))
+        .orderBy(schema.keHoachGiangDay.tuanHocId);
+    } catch (error) {
+      console.error("Error fetching kế hoạch giảng dạy:", error);
+      throw new Error("Failed to fetch teaching plan");
+    }
+  }
+
+  async createKeHoachGiangDay(
+    keHoach: typeof schema.keHoachGiangDay.$inferInsert
+  ): Promise<typeof schema.keHoachGiangDay.$inferSelect> {
+    return this.createSingle<typeof schema.keHoachGiangDay.$inferSelect>(
+      schema.keHoachGiangDay,
+      keHoach
+    );
+  }
+
+  // Nhóm thực hành
+  async getNhomThucHanh(
+    lichHocId: number
+  ): Promise<(typeof schema.nhomThucHanh.$inferSelect)[]> {
+    try {
+      return await db
+        .select()
+        .from(schema.nhomThucHanh)
+        .where(eq(schema.nhomThucHanh.lichHocId, lichHocId));
+    } catch (error) {
+      console.error("Error fetching nhóm thực hành:", error);
+      throw new Error("Failed to fetch practice groups");
+    }
+  }
+
+  async createNhomThucHanh(
+    nhom: typeof schema.nhomThucHanh.$inferInsert
+  ): Promise<typeof schema.nhomThucHanh.$inferSelect> {
+    return this.createSingle<typeof schema.nhomThucHanh.$inferSelect>(
+      schema.nhomThucHanh,
+      nhom
+    );
+  }
+
+  // Phân nhóm sinh viên
+  async getPhanNhomSinhVien(
+    sinhVienId: number
+  ): Promise<(typeof schema.phanNhomSinhVien.$inferSelect)[]> {
+    try {
+      return await db
+        .select()
+        .from(schema.phanNhomSinhVien)
+        .where(eq(schema.phanNhomSinhVien.sinhVienId, sinhVienId));
+    } catch (error) {
+      console.error("Error fetching phân nhóm sinh viên:", error);
+      throw new Error("Failed to fetch student group assignments");
+    }
+  }
+
+  async createPhanNhomSinhVien(
+    phanNhom: typeof schema.phanNhomSinhVien.$inferInsert
+  ): Promise<typeof schema.phanNhomSinhVien.$inferSelect> {
+    return this.createSingle<typeof schema.phanNhomSinhVien.$inferSelect>(
+      schema.phanNhomSinhVien,
+      phanNhom
+    );
+  }
 }
 
 export const storage = new MySQLStorage();
+
+export async function getHocKyNamHocByDate(date: Date) {
+  const hocKyNamHoc = await db
+    .select()
+    .from(schema.hockyNamHoc)
+    .where(
+      and(
+        lte(schema.hockyNamHoc.ngayBatDau, date),
+        gte(schema.hockyNamHoc.ngayKetThuc, date)
+      )
+    )
+    .limit(1);
+
+  return hocKyNamHoc.length > 0 ? hocKyNamHoc[0] : null;
+}

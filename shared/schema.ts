@@ -175,6 +175,7 @@ export const lichHocKhaDung = mysqlTable("lich_hoc_kha_dung", {
   phongHoc: varchar("phong_hoc", { length: 20 }),
   tietBatDau: int("tiet_bat_dau"),
   soTiet: int("so_tiet"),
+  loaiTiet: mysqlEnum("loai_tiet", ["lyThuyet", "thucHanh"]), // Thêm cột này
   hocKy: varchar("hoc_ky", { length: 20 }),
   namHoc: varchar("nam_hoc", { length: 20 }),
   soLuongToiDa: int("so_luong_toi_da").default(50), // Giới hạn số sinh viên
@@ -193,6 +194,17 @@ export const lichsudangnhap = mysqlTable("lichsudangnhap", {
   trangThai: mysqlEnum("trang_thai", ["Thành công", "Thất bại"]),
 });
 
+// Bảng lichsudangky
+export const lichsudangky = mysqlTable("lichsudangky", {
+  id: serial("id").primaryKey(),
+  thoiGian: datetime("thoi_gian").notNull(),
+  sinhVienId: int("sinh_vien_id").references(() => sinhvien.id),
+  monHocId: int("mon_hoc_id").references(() => monhoc.id),
+  hanhDong: varchar("hanh_dong", { length: 50 }).notNull(),
+  ketQua: varchar("ket_qua", { length: 50 }).notNull(),
+  chiTiet: text("chi_tiet"),
+});
+
 // Bảng lop
 export const lop = mysqlTable("lop", {
   id: serial("id").primaryKey(),
@@ -209,6 +221,9 @@ export const monhoc = mysqlTable("monhoc", {
   tenMon: varchar("ten_mon", { length: 100 }).notNull(),
   soTinChi: int("so_tin_chi").notNull(),
   moTa: text("mo_ta"),
+  monHocTienQuyet: int("mon_hoc_tien_quyet").references(
+    (() => (monhoc as any).id) as () => any
+  ),
 });
 
 // Bảng hocky_namhoc
@@ -537,3 +552,60 @@ export type ThongBaoTaiKhoan = typeof thongbaoTaikhoan.$inferSelect;
 export type InsertThongBaoTaiKhoan = z.infer<
   typeof insertThongBaoTaiKhoanSchema
 >;
+
+export const thoigiandangky = mysqlTable("thoigiandangky", {
+  id: serial("id").primaryKey(),
+  hockyNamHocId: int("hocky_namhoc_id").references(() => hockyNamHoc.id),
+  hocKy: varchar("hoc_ky", { length: 20 }),
+  namHoc: varchar("nam_hoc", { length: 20 }),
+  thoiGianBatDau: timestamp("thoi_gian_bat_dau"),
+  thoiGianKetThuc: timestamp("thoi_gian_ket_thuc"),
+  trangThai: varchar("trang_thai", { length: 20 }).default("Hoạt động"),
+});
+
+// Bảng tuần học trong học kỳ
+export const tuanHoc = mysqlTable("tuan_hoc", {
+  id: serial("id").primaryKey(),
+  hockyNamHocId: int("hocky_namhoc_id").references(() => hockyNamHoc.id),
+  tuanThu: int("tuan_thu").notNull(), // Tuần thứ mấy trong học kỳ
+  ngayBatDau: date("ngay_bat_dau").notNull(),
+  ngayKetThuc: date("ngay_ket_thuc").notNull(),
+  trangThai: mysqlEnum("trang_thai", ["Học", "Nghỉ"]).default("Học"),
+  ghiChu: text("ghi_chu"),
+});
+
+// Bổ sung thông tin chi tiết cho môn học
+export const chiTietMonHoc = mysqlTable("chitiet_monhoc", {
+  id: serial("id").primaryKey(),
+  monHocId: int("mon_hoc_id").references(() => monhoc.id),
+  soTietLyThuyet: int("so_tiet_ly_thuyet").notNull(),
+  soTietThucHanh: int("so_tiet_thuc_hanh").notNull(),
+  soNhomThucHanh: int("so_nhom_thuc_hanh").default(1), // Số nhóm thực hành cần chia
+  ghiChu: text("ghi_chu"),
+});
+
+// Bảng kế hoạch giảng dạy theo tuần
+export const keHoachGiangDay = mysqlTable("kehoach_giangday", {
+  id: serial("id").primaryKey(),
+  lichHocId: int("lichhoc_id").references(() => lichhoc.id),
+  tuanHocId: int("tuan_hoc_id").references(() => tuanHoc.id),
+  loaiTiet: mysqlEnum("loai_tiet", ["lyThuyet", "thucHanh"]).notNull(),
+  nhomThucHanh: int("nhom_thuc_hanh"), // Null nếu là lý thuyết
+  noiDung: text("noi_dung"), // Nội dung bài học
+  ghiChu: text("ghi_chu"),
+});
+
+// Bảng nhóm thực hành
+export const nhomThucHanh = mysqlTable("nhom_thuc_hanh", {
+  id: serial("id").primaryKey(),
+  lichHocId: int("lichhoc_id").references(() => lichhoc.id),
+  tenNhom: varchar("ten_nhom", { length: 20 }).notNull(),
+  soLuongToiDa: int("so_luong_toi_da").default(25),
+});
+
+// Bảng phân nhóm sinh viên
+export const phanNhomSinhVien = mysqlTable("phannhom_sinhvien", {
+  id: serial("id").primaryKey(),
+  sinhVienId: int("sinh_vien_id").references(() => sinhvien.id),
+  nhomThucHanhId: int("nhom_thuc_hanh_id").references(() => nhomThucHanh.id),
+});
