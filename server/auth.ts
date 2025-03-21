@@ -1,6 +1,6 @@
-import passport from "passport";
-import { Strategy as LocalStrategy } from "passport-local";
-import { Express } from "express";
+import express, { Express, Request, Response, NextFunction } from "express";
+import passport from "passport"; //-
+import { Strategy as LocalStrategy } from "passport-local"; //-
 import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
@@ -131,7 +131,7 @@ export function setupAuth(app: Express) {
     }
   });
 
-  app.post("/api/register", async (req, res, next) => {
+  app.post("/api/register", async (req: any, res: any, next) => {
     try {
       const { tenDangNhap, password, role, email, ...data } = req.body;
       const matKhauHash = await hashPassword(password);
@@ -176,7 +176,7 @@ export function setupAuth(app: Express) {
           tokenResetPassword: null,
           tokenExpiry: null,
         });
-        req.login(
+        (req as Express.Request).login(
           {
             id: user.id,
             tenDangNhap,
@@ -220,7 +220,7 @@ export function setupAuth(app: Express) {
           tokenResetPassword: null,
           tokenExpiry: null,
         });
-        req.login(
+        (req as Express.Request).login(
           {
             id: user.id,
             tenDangNhap,
@@ -247,8 +247,6 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    // console.log("Request body:", JSON.stringify(req.body)); // In chi tiết body
-    // console.log("Headers:", req.headers); // In headers để kiểm tra Content-Type
     passport.authenticate(
       "local",
       (err: Error | null, user: any, info: any) => {
@@ -257,7 +255,7 @@ export function setupAuth(app: Express) {
           return res
             .status(401)
             .json({ message: info?.message || "Invalid credentials" });
-        req.login(user, (err) => {
+        (req as Express.Request).login(user, (err) => {
           if (err) return next(err);
           return res.status(200).json({
             id: user.id,
@@ -277,7 +275,7 @@ export function setupAuth(app: Express) {
     });
   });
 
-  app.get("/api/user", (req, res) => {
+  app.get("/api/user", (req: any, res: any) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     res.json({
       id: req.user.id,
@@ -287,7 +285,7 @@ export function setupAuth(app: Express) {
     });
   });
 
-  app.get("/api/profile", async (req, res) => {
+  app.get("/api/profile", async (req: any, res: any) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     try {
       const { role } = req.user;

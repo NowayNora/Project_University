@@ -26,7 +26,7 @@ import {
   InsertThanhVienNghienCuu,
   ThongBao,
   InsertThongBao,
-  HocKyNamHoc, // Thêm type HocKyNamHoc
+  HocKyNamHoc,
 } from "@shared/schema";
 
 const MemoryStore = createMemoryStore(session);

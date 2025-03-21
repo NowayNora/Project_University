@@ -2,6 +2,10 @@ import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { ClassManagement } from "@/components/admin/class-management";
+import { DashboardStats } from "@/components/admin/dashboard-stats";
+import { RegistrationPeriodManagement } from "@/components/admin/registration-period-management";
+import { AdminSidebar } from "@/components/admin/sidebar";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
 import { AuthProvider } from "@/hooks/use-auth";
@@ -21,7 +25,7 @@ import { ProtectedRoute } from "@/lib/protected-route";
 function Router() {
   return (
     <Switch>
-      <ProtectedRoute
+      {/* <ProtectedRoute
         path="/"
         component={() => <Redirect to="/student/dashboard" />}
       />
@@ -70,18 +74,23 @@ function Router() {
         component={TeachingPage}
         vaiTro="faculty"
       />
-      {/* <ProtectedRoute
-        path="/giangvien/tailieu"
-        component={}
-        vaiTro="faculty"
-      /> */}
+      <ProtectedRoute path="/giangvien/tailieu" component={} vaiTro="faculty" />
       <ProtectedRoute
         path="/giangvien/quanlydiem"
         component={GradeManagementPage}
         vaiTro="faculty"
-      />
+      /> */}
+      {/* <ProtectedRoute
+        path="/admin/registration-periods"
+        component={RegistrationPeriodManagement}
+        vaiTro="admin"
+      /> */}
 
-      <Route path="/auth" component={AuthPage} />
+      <Route path="/" component={AuthPage} />
+      {/* <Route
+        path="/admin/registration-periods"
+        component={RegistrationPeriodManagement}
+      /> */}
       <Route component={NotFound} />
     </Switch>
   );

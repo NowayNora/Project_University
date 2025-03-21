@@ -30,7 +30,7 @@ declare module "express" {
 }
 
 // Middleware xác thực và phân quyền
-const validateRequest = (schema: z.ZodType<any, any>) => {
+export const validateRequest = (schema: z.ZodType<any, any>) => {
   return (req: any, res: any, next: any) => {
     try {
       req.validatedBody = schema.parse(req.body);
@@ -86,12 +86,12 @@ const attachClassDetails = async (req: any, res: any, next: any) => {
   }
 };
 
-const isAuthenticated = (req: any, res: any, next: any) => {
+export const isAuthenticated = (req: any, res: any, next: any) => {
   if (req.isAuthenticated() && req.user) return next();
   res.status(401).json({ message: "Unauthorized" });
 };
 
-const hasRole = (role: "student" | "faculty" | "admin") => {
+export const hasRole = (role: "student" | "faculty" | "admin") => {
   return (req: any, res: any, next: any) => {
     if (req.user!.role !== role) {
       return res.status(403).json({ message: "Forbidden" });

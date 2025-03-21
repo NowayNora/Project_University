@@ -1,8 +1,4 @@
-import express, {
-  type Request,
-  type Response,
-  type NextFunction,
-} from "express";
+import express, { Request, Response, NextFunction, Express } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import fs from "fs";
@@ -10,7 +6,7 @@ import http from "http";
 import https from "https";
 import path from "path";
 import dotenv from "dotenv";
-import { WebSocketServer } from "ws"; // ⬅ Thêm WebSocket
+import { WebSocketServer } from "ws";
 dotenv.config();
 
 // Cấu hình SSL
@@ -21,7 +17,7 @@ const credentials = {
 };
 
 // Khởi tạo ứng dụng
-const app = express();
+const app: Express = express();
 const PORT_HTTP = 8080;
 const PORT_HTTPS = 8443;
 const HOST = "localhost";
@@ -30,11 +26,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Middleware logging
-app.use((req: Request, res: Response, next: NextFunction) => {
+app.use((req: any, res: any, next) => {
   const start = Date.now();
   const { path, method } = req;
   let responseBody: Record<string, any> | undefined;
-
   const originalJson = res.json;
   res.json = function (body: any, ...args: any[]) {
     responseBody = body;
@@ -66,7 +61,8 @@ const startServer = async () => {
     const server = await registerRoutes(app);
 
     // Error handling middleware
-    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    app.use((err: any, req: any, res: Response, next: NextFunction) => {
+      console.error(err);
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
       log(`Error ${status}: ${message}`);
